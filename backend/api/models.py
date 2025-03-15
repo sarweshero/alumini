@@ -46,7 +46,12 @@ class CustomUser(AbstractUser):
         verbose_name="user permissions"
     )
 
-    def save(self, *args, **kwargs):
+    def update_is_staff(self):
+        """Set is_staff flag based on the user's role."""
+        self.is_staff = self.role != "Student"
+
+    def update_previous_work(self):
+        """Update previous_work if current_work has changed."""
         if self.pk:
             original = CustomUser.objects.get(pk=self.pk)
             if original.current_work != self.current_work and original.current_work:
@@ -54,7 +59,13 @@ class CustomUser(AbstractUser):
                 if original.current_work not in prev_list:
                     prev_list.append(original.current_work)
                     self.previous_work = prev_list
+
+    def save(self, *args, **kwargs):
+        """Save method with separated logic for clarity."""
+        self.update_is_staff()
+        self.update_previous_work()
         super().save(*args, **kwargs)
+
 
     def __str__(self):
         return self.username
@@ -79,6 +90,8 @@ class PendingSignup(models.Model):
 	created_at = models.DateTimeField(auto_now_add=True)
 	is_approved = models.BooleanField(default=False)
 	approved_at = models.DateTimeField(null=True, blank=True)
+	username = models.CharField(max_length=150, unique=True)
+	password = models.CharField(max_length=128)
 	
 	def __str__(self):
 		return f"PendingSignup: {self.email}"

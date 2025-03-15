@@ -118,36 +118,6 @@ class LogoutView(APIView):
         request.user.auth_token.delete()
         return Response({'status': 'logged out'}, status=status.HTTP_200_OK)
 
-class UserSignupView(APIView):
-    permission_classes = [permissions.AllowAny]
-    def post(self, request):
-        username = request.data.get('username')
-        password = request.data.get('password')
-        first_name = request.data.get('first_name')
-        last_name = request.data.get('last_name')
-        email = request.data.get('email')
-        college_name = request.data.get('college_name')
-        role = request.data.get('role')
-        phone = request.data.get('phone')
-
-        if User.objects.filter(username=username).exists():
-            return Response({'error': 'User already exists'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        user = User.objects.create_user(
-            username=username, 
-            password=password,
-            first_name=first_name,
-            last_name=last_name,
-            email=email,
-            college_name=college_name,
-            role=role,
-            phone=phone
-        )
-        return Response({'status': 'User created'}, status=status.HTTP_201_CREATED)
-
-        
-
-
 class SignupOTPView(APIView):
     def post(self, request, format=None):
         email = request.data.get("email")
@@ -181,6 +151,8 @@ class SignupView(APIView):
         college_name = request.data.get("collegeName")
         role = request.data.get("role")
         phone = request.data.get("phone")
+        username = request.data.get("username")
+        password = request.data.get("password")
         if not email or not otp:
             return Response({"error": "Email and OTP required"}, status=status.HTTP_400_BAD_REQUEST)
             
@@ -193,13 +165,14 @@ class SignupView(APIView):
             otp_entry.delete()
             return Response({"error": "OTP has expired"}, status=status.HTTP_400_BAD_REQUEST)
             
-   
         # Create or update pending signup details using the PendingSignup model
         pending, created = models.PendingSignup.objects.get_or_create(email=email)
         pending.name = name
         pending.College_Name = college_name
         pending.role = role
         pending.phone = phone
+        pending.username = username
+        pending.password = password
         pending.save()
 
         admin_email = 'nithishkumarnk182005@gmail.com'
@@ -234,9 +207,7 @@ class ApproveSignupView(APIView):
         pending.approved_at = timezone.now()
         pending.save()
 
-        alphabet = string.ascii_letters + string.digits + "!@#$%^&*()-_"
-        strong_password = ''.join(secrets.choice(alphabet) for _ in range(20))
-        user = User.objects.create_user(username=pending.email, email=pending.email, password=strong_password)
+        user = User.objects.create_user(username=pending.username, email=pending.email, password=pending.password)
         user.first_name = pending.name
         user.college_name = pending.College_Name
         user.role = pending.role
@@ -245,7 +216,7 @@ class ApproveSignupView(APIView):
         
         send_mail(
             'Your Account Has Been Approved',
-            f'Your account has been approved.\nUsername: {pending.email}\nPassword: {strong_password}',
+            f'Your account has been approved.\nUsername: {pending.username}',
             "sarweshwardeivasihamani@gmail.com",
             [pending.email],
             fail_silently=False,
