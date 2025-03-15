@@ -1,5 +1,10 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
+from .models import ChatRoom, ChatMessage
+from channels.db import database_sync_to_async
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
 
 class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -23,15 +28,25 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def receive(self, text_data):
         data = json.loads(text_data)
         message = data.get("message")
-        sender = data.get("sender")
-        
+        sender_username = data.get("sender")
+
+        # Get sender user object
+        sender = await self.get_user(sender_username)
+        if not sender:
+            return
+
+        # Save message to database
+        room = await self.get_room(self.room_id)
+        if room:
+            await self.save_message(room, sender, message)
+
         # Broadcast message to room group along with sender info
         await self.channel_layer.group_send(
             self.room_group_name,
             {
                 "type": "chat_message",
                 "message": message,
-                "sender": sender,
+                "sender": sender_username,
             }
         )
 
@@ -43,3 +58,21 @@ class ChatConsumer(AsyncWebsocketConsumer):
             "message": message,
             "sender": sender,
         }))
+
+    @database_sync_to_async
+    def get_user(self, username):
+        try:
+            return User.objects.get(username=username)
+        except User.DoesNotExist:
+            return None
+
+    @database_sync_to_async
+    def get_room(self, room_id):
+        try:
+            return ChatRoom.objects.get(id=room_id)
+        except ChatRoom.DoesNotExist:
+            return None
+
+    @database_sync_to_async
+    def save_message(self, room, sender, message):
+        ChatMessage.objects.create(room=room, sender=sender, content=message)

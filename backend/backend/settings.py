@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'django_user_agents',
+    'channels',
 ]
 
 # CORS configuration
@@ -103,12 +104,14 @@ JAZZMIN_SETTINGS = {
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'al',
-        'USER': 'postgres', 
-        'PASSWORD': 'postgres',
-        'HOST': 'localhost',
+        'NAME': 'postgres',
+        'USER': 'postgres.ojkwtilsrkblncgilzvh',
+        'PASSWORD': 'KAHE@alumni.',  # Replace with actual password
+        'HOST': 'aws-0-ap-south-1.pooler.supabase.com',
+        'PORT': '6543',
     }
 }
+
 
 
 # Password validation
@@ -154,3 +157,13 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Add channel layers configuration
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [('127.0.0.1', 6379)],
+        },
+    },
+}

@@ -98,7 +98,7 @@ class ChatStartView(APIView):
         room = ChatRoom.objects.filter(participants=request.user).filter(participants=target_user).first()
         if not room:
             room = ChatRoom.objects.create(
-                name=f"Chat between {request.user.username} and {target_user.username}"
+                name=target_user.username  # Set the room name to the target user's username
             )
             room.participants.add(request.user, target_user)
             room.save()
