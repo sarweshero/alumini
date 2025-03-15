@@ -2,32 +2,32 @@
 from . import models
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Jobs, JobComment
+from . import models
 
-User = get_user_model()
+User = get_user_model()    
+class PendingSignupSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.PendingSignup
+        fields = '__all__'
 
 class UserSerializer(serializers.ModelSerializer):
-    password = write_only=True
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name']  
-
-class ProfileSerializer(serializers.ModelSerializer):
-
-    class Meta:
-        model = models.Profile
-        fields = '__all__'
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'college_name', 'role', 'phone', 'social_links', 'profile_photo', 'cover_photo', 'bio', 'contact_number', 'passed_out_year', 'current_work', 'previous_work', 'experience']
+        extra_kwargs = {'password': {'write_only': True}}
 
 class LoginLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.LoginLog
         fields = ['timestamp', 'ip_address', 'browser', 'browser_version', 'device', 'successful']
-
 class memberSerializer(serializers.ModelSerializer):
     class Meta:
-        model = models.Profile
-        fields = ['user', 'first_name', 'last_name', 'email', 'contact_number', 'passed_out_year', 'current_work', 'experience', 'social_links', 'profile_photo', 'cover_photo', 'bio']
-
+        model = models.CustomUser
+        fields = [
+            'username', 'first_name', 'last_name', 'email', 'contact_number', 
+            'passed_out_year', 'current_work', 'experience', 'social_links', 
+            'profile_photo', 'cover_photo', 'bio'
+        ]
 
 class EventSerializer(serializers.ModelSerializer):
     class Meta:
@@ -57,7 +57,7 @@ class JobCommentSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()  # Changed field to return user details
 
     class Meta:
-        model = JobComment
+        model = models.JobComment
         fields = ['id', 'job', 'user', 'comment', 'created_at']
         read_only_fields = ['id', 'created_at', 'job', 'user']
 
@@ -79,7 +79,7 @@ class JobsSerializer(serializers.ModelSerializer):
     total_reactions = serializers.SerializerMethodField()
 
     class Meta:
-        model = Jobs
+        model = models.Jobs
         fields = '__all__'
         extra_kwargs = {'user': {'read_only': True}}
         read_only_fields = ['id', 'posted_on', 'views', 'comments', 'images', 'total_reactions', 'total_comments']

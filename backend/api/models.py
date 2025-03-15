@@ -1,18 +1,8 @@
 from django.db import models
 from django.contrib.auth import get_user_model
 from phonenumber_field.modelfields import PhoneNumberField
-
+from django.contrib.auth.models import AbstractUser, Group, Permission
 User = get_user_model()
-
-def get_default_reaction():
-    return {
-        "like": 0,
-        "love": 0,
-        "haha": 0,
-        "wow": 0,
-        "sad": 0
-    }
-
 def get_default_social_links():
     return {
         "Github": "",
@@ -25,55 +15,82 @@ def get_default_social_links():
         "YouTube": "",
     }
 
-class Profile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
-    first_name = models.CharField(max_length=255, blank=True)
-    last_name = models.CharField(max_length=255, blank=True)
-    email = models.EmailField(max_length=255, blank=True)
-    social_links = models.JSONField(
-        default=get_default_social_links,
-        blank=True
-    )  # Social media links
+
+
+class CustomUser(AbstractUser):
+    college_name = models.CharField(max_length=500)
+    role = models.CharField(max_length=50)
+    phone = models.CharField(max_length=20)
+    social_links = models.JSONField(default=get_default_social_links, blank=True)
     profile_photo = models.ImageField(upload_to='profile_pics/', null=True, blank=True)
     cover_photo = models.ImageField(upload_to='cover_pics/', null=True, blank=True)
-
-    def sync_user(self):
-        """
-        Synchronize the Profile's first name, last name, and email with the User model.
-        """
-        if self.user:
-            updated = False
-            if self.first_name and self.first_name != self.user.first_name:
-                self.user.first_name = self.first_name
-                updated = True
-            if self.last_name and self.last_name != self.user.last_name:
-                self.user.last_name = self.last_name
-                updated = True
-            if self.email and self.email != self.user.email:
-                self.user.email = self.email
-                updated = True
-            if updated:
-                self.user.save()
     bio = models.TextField(max_length=500, blank=True)
     contact_number = PhoneNumberField(blank=True, default="+911234567890")
-    passed_out_year = models.PositiveIntegerField(null=True, blank=True) 
-    current_work = models.CharField(max_length=255, blank=True)  
-    previous_work = models.JSONField(default=list, blank=True) 
-    experience = models.JSONField(default=list, blank=True)  
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f"Profile of {self.user.username}"
+    passed_out_year = models.PositiveIntegerField(null=True, blank=True)
+    current_work = models.CharField(max_length=255, blank=True)
+    previous_work = models.JSONField(default=list, blank=True)
+    experience = models.JSONField(default=list, blank=True)
+    groups = models.ManyToManyField(
+        Group,
+        related_name="customuser_set",  # Custom reverse accessor
+        blank=True,
+        help_text="The groups this user belongs to.",
+        verbose_name="groups"
+    )
+    
+    user_permissions = models.ManyToManyField(
+        Permission,
+        related_name="customuser_set",  # Custom reverse accessor
+        blank=True,
+        help_text="Specific permissions for this user.",
+        verbose_name="user permissions"
+    )
 
     def save(self, *args, **kwargs):
         if self.pk:
-            original = Profile.objects.get(pk=self.pk)
+            original = CustomUser.objects.get(pk=self.pk)
             if original.current_work != self.current_work and original.current_work:
                 prev_list = self.previous_work if isinstance(self.previous_work, list) else []
                 if original.current_work not in prev_list:
                     prev_list.append(original.current_work)
                     self.previous_work = prev_list
         super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.username
+
+class SignupOTP(models.Model):
+    email = models.EmailField()
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Signup OTP for {self.email}: {self.code}"
+
+
+
+
+class PendingSignup(models.Model):
+	email = models.EmailField(unique=True)
+	name = models.CharField(max_length=255)
+	College_Name = models.CharField(max_length=500)
+	role = models.CharField(max_length=50)
+	phone = models.CharField(max_length=20)
+	created_at = models.DateTimeField(auto_now_add=True)
+	is_approved = models.BooleanField(default=False)
+	approved_at = models.DateTimeField(null=True, blank=True)
+	
+	def __str__(self):
+		return f"PendingSignup: {self.email}"
+
+def get_default_reaction():
+    return {
+        "like": 0,
+        "love": 0,
+        "haha": 0,
+        "wow": 0,
+        "sad": 0
+    }
 
 class LoginLog(models.Model):
     """
@@ -194,4 +211,3 @@ class AlbumImage(models.Model):
 
     def __str__(self):
         return f"Image for album: {self.album.title}"
-
