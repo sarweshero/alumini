@@ -1,5 +1,6 @@
 asgiref==3.8.1
 cachetools==5.5.1
+channels==4.2.0
 Django==5.1.6
 django-allauth==65.4.1
 django-cors-headers==4.7.0
@@ -9,6 +10,8 @@ django-rest-authtoken==2.1.4
 django-user-agents==0.4.0
 djangorestframework==3.15.2
 google-auth==2.38.0
+mysql==0.0.3
+mysqlclient==2.2.6
 phonenumbers==8.13.55
 pillow==11.1.0
 psycopg2==2.9.10
