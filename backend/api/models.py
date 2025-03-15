@@ -16,7 +16,6 @@ def get_default_social_links():
     }
 
 
-
 class CustomUser(AbstractUser):
     college_name = models.CharField(max_length=500)
     role = models.CharField(max_length=50)
@@ -66,35 +65,34 @@ class CustomUser(AbstractUser):
         self.update_previous_work()
         super().save(*args, **kwargs)
 
-
     def __str__(self):
         return self.username
-
-class SignupOTP(models.Model):
-    email = models.EmailField()
-    code = models.CharField(max_length=6)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"Signup OTP for {self.email}: {self.code}"
-
 
 
 
 class PendingSignup(models.Model):
-	email = models.EmailField(unique=True)
-	name = models.CharField(max_length=255)
-	College_Name = models.CharField(max_length=500)
-	role = models.CharField(max_length=50)
-	phone = models.CharField(max_length=20)
-	created_at = models.DateTimeField(auto_now_add=True)
-	is_approved = models.BooleanField(default=False)
-	approved_at = models.DateTimeField(null=True, blank=True)
-	username = models.CharField(max_length=150, unique=True)
-	password = models.CharField(max_length=128)
-	
-	def __str__(self):
-		return f"PendingSignup: {self.email}"
+    email = models.EmailField(unique=True)
+    name = models.CharField(max_length=255)
+    college_name = models.CharField(max_length=500)
+    role = models.CharField(max_length=50)
+    phone = models.CharField(max_length=20)
+    social_links = models.JSONField(default=get_default_social_links, blank=True)
+    profile_photo = models.ImageField(upload_to='profile_pics/', null=True, blank=True)
+    cover_photo = models.ImageField(upload_to='cover_pics/', null=True, blank=True)
+    bio = models.TextField(max_length=500, blank=True)
+    contact_number = PhoneNumberField(blank=True, default="+911234567890")
+    passed_out_year = models.PositiveIntegerField(null=True, blank=True)
+    current_work = models.CharField(max_length=255, blank=True)
+    previous_work = models.JSONField(default=list, blank=True)
+    experience = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_approved = models.BooleanField(default=False)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    username = models.CharField(max_length=150, unique=True)
+    password = models.CharField(max_length=128)
+
+    def __str__(self):
+        return f"PendingSignup: {self.email}"
 
 def get_default_reaction():
     return {
