@@ -69,6 +69,14 @@ class CustomUser(AbstractUser):
         return self.username
 
 
+class SignupOTP(models.Model):
+    email = models.EmailField()
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Signup OTP for {self.email}: {self.code}"
+
 
 class PendingSignup(models.Model):
     email = models.EmailField(unique=True)
