@@ -168,7 +168,7 @@ class SignupView(APIView):
         # Create or update pending signup details using the PendingSignup model
         pending, created = models.PendingSignup.objects.get_or_create(email=email)
         pending.name = name
-        pending.College_Name = college_name
+        pending.college_name = college_name
         pending.role = role
         pending.phone = phone
         pending.username = username
@@ -209,7 +209,7 @@ class ApproveSignupView(APIView):
 
         user = User.objects.create_user(username=pending.username, email=pending.email, password=pending.password)
         user.first_name = pending.name
-        user.college_name = pending.College_Name
+        user.college_name = pending.college_name
         user.role = pending.role
         user.phone = pending.phone
         user.save()
