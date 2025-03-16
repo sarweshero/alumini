@@ -148,7 +148,7 @@ class SignupView(APIView):
         email = request.data.get("email")
         otp = request.data.get("otp")
         name = request.data.get("name")
-        college_name = request.data.get("collegeName")
+        college_name = request.data.get("college_name")
         role = request.data.get("role")
         phone = request.data.get("phone")
         username = request.data.get("username")
@@ -175,7 +175,7 @@ class SignupView(APIView):
         pending.password = password
         pending.save()
 
-        admin_email = 'nithishkumarnk182005@gmail.com'
+        admin_email = 'sarweshwardeivasihamani@gmail.com'
         send_mail(
             'New Signup Approval Needed',
             f'New signup request details:\nEmail: {email}\nName: {name}\nCollege: {college_name}\nRole: {role}\nPhone: {phone}',
