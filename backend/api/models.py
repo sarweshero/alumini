@@ -20,8 +20,8 @@ class CustomUser(AbstractUser):
     role = models.CharField(max_length=50)
     phone = models.CharField(max_length=20)
     social_links = models.JSONField(default=get_default_social_links, blank=True)
-    profile_photo = models.ImageField(upload_to='profile_pics/', null=True, blank=True)
-    cover_photo = models.ImageField(upload_to='cover_pics/', null=True, blank=True)
+    profile_photo = models.FileField(upload_to='profile_pics/', null=True, blank=True)
+    cover_photo = models.FileField(upload_to='cover_pics/', null=True, blank=True)
     bio = models.TextField(max_length=500, blank=True)
     contact_number = PhoneNumberField(blank=True, default="+911234567890")
     passed_out_year = models.PositiveIntegerField(null=True, blank=True)
@@ -85,8 +85,8 @@ class PendingSignup(models.Model):
     role = models.CharField(max_length=50)
     phone = models.CharField(max_length=20)
     social_links = models.JSONField(default=get_default_social_links, blank=True)
-    profile_photo = models.ImageField(upload_to='profile_pics/', null=True, blank=True)
-    cover_photo = models.ImageField(upload_to='cover_pics/', null=True, blank=True)
+    profile_photo = models.FileField(upload_to='profile_pics/', null=True, blank=True)
+    cover_photo = models.FileField(upload_to='cover_pics/', null=True, blank=True)
     bio = models.TextField(max_length=500, blank=True)
     contact_number = PhoneNumberField(blank=True, default="+911234567890")
     passed_out_year = models.PositiveIntegerField(null=True, blank=True)
@@ -134,7 +134,7 @@ class Events(models.Model):
     venue = models.CharField(max_length=255)
     from_date_time = models.DateTimeField(null=False)
     end_date_time = models.DateTimeField(null=True, blank=True)
-    image = models.ImageField(upload_to='event_images/', null=True, blank=True)
+    image = models.FileField(upload_to='event_images/', null=True, blank=True)
     tag = models.CharField(max_length=255, blank=True)
     uploaded_by = models.CharField(
         max_length=10,
@@ -176,7 +176,7 @@ class JobImage(models.Model):
     Handles multiple image uploads for a job posting.
     """
     job = models.ForeignKey(Jobs, on_delete=models.CASCADE, related_name='images')
-    image = models.ImageField(upload_to='job_images/')
+    image = models.FileField(upload_to='job_images/')
 
     def __str__(self):
         return f"Image for {self.job.company_name} - {self.job.role}"
@@ -215,7 +215,7 @@ class Album(models.Model):
     posted_on = models.DateTimeField(auto_now_add=True)
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    cover_image = models.ImageField(upload_to='album_covers/', null=True, blank=True)
+    cover_image = models.FileField(upload_to='album_covers/', null=True, blank=True)
 
     def __str__(self):
         return f"Album: {self.title} by {self.user.username}"
@@ -226,7 +226,7 @@ class AlbumImage(models.Model):
     Additional images for an album.
     """
     album = models.ForeignKey(Album, on_delete=models.CASCADE, related_name='images')
-    image = models.ImageField(upload_to='album_images/')
+    image = models.FileField(upload_to='album_images/')
 
     def __str__(self):
         return f"Image for album: {self.album.title}"
