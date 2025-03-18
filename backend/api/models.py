@@ -2,7 +2,6 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from phonenumber_field.modelfields import PhoneNumberField
 from django.contrib.auth.models import AbstractUser, Group, Permission
-User = get_user_model()
 def get_default_social_links():
     return {
         "Github": "",
@@ -68,6 +67,7 @@ class CustomUser(AbstractUser):
     def __str__(self):
         return self.username
 
+User = get_user_model()
 
 class SignupOTP(models.Model):
     email = models.EmailField()
@@ -138,8 +138,8 @@ class Events(models.Model):
     tag = models.CharField(max_length=255, blank=True)
     uploaded_by = models.CharField(
         max_length=10,
-        choices=[('user', 'User'), ('staff', 'Staff'), ('admin', 'Admin')],
-        default='user'
+        choices=[('Student', 'student'), ('staff', 'Staff'), ('admin', 'Admin')],
+        default='Student'
     )
 
     def __str__(self):

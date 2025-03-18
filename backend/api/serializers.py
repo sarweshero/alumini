@@ -73,7 +73,7 @@ class JobCommentSerializer(serializers.ModelSerializer):
 
 class JobsSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()  # Changed field: return profile info
-    images = JobImageSerializer(many=True, read_only=True)  # New field to send job images
+    images = JobImageSerializer(many=True, read_only=True)
     comments = JobCommentSerializer(many=True, read_only=True)
     total_comments = serializers.SerializerMethodField()
     total_reactions = serializers.SerializerMethodField()
@@ -81,18 +81,21 @@ class JobsSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Jobs
         fields = '__all__'
-        extra_kwargs = {'user': {'read_only': True}}
+        extra_kwargs = {
+            'user': {'read_only': True},
+            'role': {'read_only': True},
+        }
         read_only_fields = ['id', 'posted_on', 'views', 'comments', 'images', 'total_reactions', 'total_comments']
 
     def get_user(self, obj):
-        # Return first_name and last_name from the Profile model
-        profile = getattr(obj.user, 'profile', None)
-        if profile:
+        customUser = getattr(obj.user, 'CustomUser', None)
+        if customUser:
             return {
-                "first_name": profile.first_name,
-                "last_name": profile.last_name,
-                "profile_photo": profile.profile_photo.url if profile.profile_photo else ""
-            }
+                "first_name": customUser.first_name, 
+                "last_name": customUser.last_name,
+                "profile_photo": customUser.profile_photo.url if customUser.profile_photo else ""
+                }      
+            
         return {}
 
     def get_total_reactions(self, obj):

@@ -18,6 +18,7 @@ from .serializers import *
 from user_agents import parse
 from django.core.cache import cache
 from rest_framework.permissions import IsAdminUser
+from django.contrib.auth import get_user_model
 User = get_user_model()
 
 def get_user_agent_info(request):
@@ -69,7 +70,7 @@ class StaffLoginView(APIView):
         user_agent_info = get_user_agent_info(request)
 
         user = authenticate(username=username, password=password)
-        if user and user.is_staff and not user.is_superuser:
+        if user and user.is_staff:
             token, _ = Token.objects.get_or_create(user=user)
             LoginLog.objects.create(
                 user=user, ip_address=ip_address, successful=True, **user_agent_info
@@ -93,7 +94,8 @@ class UserLoginView(APIView):
         user_agent_info = get_user_agent_info(request)
 
         user = authenticate(username=username, password=password)
-        if user and not user.is_staff and not user.is_superuser:
+        # Allow login for any non-admin user (staff and regular)
+        if user:
             token, _ = Token.objects.get_or_create(user=user)
             user.last_login = timezone.now()
             user.save(update_fields=["last_login"])
@@ -107,7 +109,7 @@ class UserLoginView(APIView):
                 user=user, ip_address=ip_address, successful=False, **user_agent_info
             )
         return Response(
-            {"error": "Invalid credentials or not a regular user"},
+            {"error": "Invalid credentials or user cannot login here"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -153,9 +155,17 @@ class SignupView(APIView):
         phone = request.data.get("phone")
         username = request.data.get("username")
         password = request.data.get("password")
+        
         if not email or not otp:
             return Response({"error": "Email and OTP required"}, status=status.HTTP_400_BAD_REQUEST)
-            
+        
+        # Check if the username is already taken
+        if CustomUser.objects.filter(username=username).exists():
+            return Response({"error": "Username already taken."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if PendingSignup.objects.filter(username=username).exists():
+            return Response({"error": "Username already taken."}, status=status.HTTP_400_BAD_REQUEST)
+        
         otp_entry = models.SignupOTP.objects.filter(email=email, code=otp).order_by('-created_at').first()
         if not otp_entry:
             return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
@@ -185,9 +195,8 @@ class SignupView(APIView):
         )
         otp_entry.delete()
         return Response({"message": "Signup request submitted. Await admin approval."}, status=status.HTTP_200_OK)
-
 class ApproveSignupView(APIView):
-    permission_classes = [IsAdminUser]
+    # permission_classes = [IsAdminUser]
 
     def get(self, request):
         pending = models.PendingSignup.objects.filter(is_approved=False)
@@ -350,10 +359,9 @@ class JobListCreateView(APIView):
         # Handle job data
         job_data = request.data.copy()
         images = request.FILES.getlist('images')  # Get list of uploaded images
-        
         serializer = JobsSerializer(data=job_data)
         if serializer.is_valid():
-            job = serializer.save(user=request.user)
+            job = serializer.save(user=request.user, role = request.user.role)
             
             # Handle image uploads
             for image in images:
