@@ -340,12 +340,15 @@ class EventView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def post(self, request):
-        serializer = EventSerializer(data=request.data)
+        data = request.data.copy()  # Create a shallow copy of the data
+        data['role'] = request.user.role
+        data['user'] = request.user.id 
+        serializer = EventSerializer(data=data,files=request.FILES)
         if serializer.is_valid():
             serializer.save(user=request.user)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+        
 class JobListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
@@ -359,9 +362,11 @@ class JobListCreateView(APIView):
         # Handle job data
         job_data = request.data.copy()
         images = request.FILES.getlist('images')  # Get list of uploaded images
+        job_data['uploaded_by'] = request.user.role
+        job_data['user'] = request.user.id  # Set the user field
         serializer = JobsSerializer(data=job_data)
         if serializer.is_valid():
-            job = serializer.save(user=request.user, role = request.user.role)
+            job = serializer.save(role=request.user.role)
             
             # Handle image uploads
             for image in images:
@@ -371,7 +376,7 @@ class JobListCreateView(APIView):
             updated_serializer = JobsSerializer(job)
             return Response(updated_serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
+    
 
 class JobDetailView(APIView):
     """
@@ -511,7 +516,7 @@ class HomePageDataView(APIView):
         album_images_serializer = AlbumSerializer(latest_album_images, many=True)
 
         # Fetch latest members with the "student" role
-        latest_members = CustomUser.objects.filter(role='student').order_by('-id')[:60]
+        latest_members = CustomUser.objects.filter(role='Student').order_by('-id')[:60]
         members_serializer = memberSerializer(latest_members, many=True)
 
         return Response({

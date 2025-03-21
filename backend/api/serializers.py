@@ -72,7 +72,7 @@ class JobCommentSerializer(serializers.ModelSerializer):
             }
 
 class JobsSerializer(serializers.ModelSerializer):
-    user = serializers.SerializerMethodField()  # Changed field: return profile info
+    user = serializers.SerializerMethodField() # Changed field: return profile info
     images = JobImageSerializer(many=True, read_only=True)
     comments = JobCommentSerializer(many=True, read_only=True)
     total_comments = serializers.SerializerMethodField()
@@ -88,15 +88,12 @@ class JobsSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'posted_on', 'views', 'comments', 'images', 'total_reactions', 'total_comments']
 
     def get_user(self, obj):
-        customUser = getattr(obj.user, 'CustomUser', None)
-        if customUser:
-            return {
-                "first_name": customUser.first_name, 
-                "last_name": customUser.last_name,
-                "profile_photo": customUser.profile_photo.url if customUser.profile_photo else ""
-                }      
-            
-        return {}
+        user = obj.user  # Directly use the custom user instance
+        return {
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "profile_photo": user.profile_photo.url if user.profile_photo else ""
+        }
 
     def get_total_reactions(self, obj):
         return sum(obj.reaction.values()) if obj.reaction else 0

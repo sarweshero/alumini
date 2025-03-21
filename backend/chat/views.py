@@ -1,106 +1,91 @@
-from django.shortcuts import render
-from rest_framework import generics, permissions, status
-from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.shortcuts import get_object_or_404
-from .models import ChatRoom, ChatMessage
-from .serializers import ChatRoomSerializer, ChatMessageSerializer
+from rest_framework.response import Response
+from rest_framework import permissions
 from django.contrib.auth import get_user_model
 from django.db.models import Q
+from .models import ChatMessage as Message
+from .serializers import MessageSerializer, UserSerializer
 
 User = get_user_model()
 
-# List all chat rooms where the current user is a participant
-class ChatRoomListView(generics.ListAPIView):
+class ChatRoomAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
-    serializer_class = ChatRoomSerializer
 
-    def get_queryset(self):
-        return ChatRoom.objects.filter(participants=self.request.user)
-
-
-# Create a new chat room
-class ChatRoomCreateView(generics.CreateAPIView):
-    permission_classes = [permissions.IsAuthenticated]
-    serializer_class = ChatRoomSerializer
-
-    def perform_create(self, serializer):
-        room = serializer.save()
-        # Add the creator as a participant by default
-        room.participants.add(self.request.user)
-        room.save()
-
-
-# List messages for a specific room
-class ChatMessageListView(generics.ListAPIView):
-    permission_classes = [permissions.IsAuthenticated]
-    serializer_class = ChatMessageSerializer
-
-    def get_queryset(self):
-        room_id = self.kwargs.get("room_id")
-        room = get_object_or_404(ChatRoom, id=room_id)
-        if self.request.user in room.participants.all():
-            return room.messages.all().order_by('timestamp')
-        return ChatMessage.objects.none()
-
-
-# Create a new message
-class ChatMessageCreateView(generics.CreateAPIView):
-    permission_classes = [permissions.IsAuthenticated]
-    serializer_class = ChatMessageSerializer
-
-    def perform_create(self, serializer):
-        room_id = self.kwargs.get("room_id")
-        room = get_object_or_404(ChatRoom, id=room_id)
-        if self.request.user not in room.participants.all():
-            room.participants.add(self.request.user)
-        serializer.save(room=room, sender=self.request.user)
-
-# New view to search users by username, first name, or last name (excluding self)
-class ChatUserSearchView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    def get(self, request, room_name, format=None):
+        search_query = request.GET.get('search', '')
+        # Get users except the logged-in user
+        users = User.objects.exclude(id=request.user.id)
+        
+        # Filter messages where sender or receiver username matches the room_name
+        chats = Message.objects.filter(
+            (Q(sender=request.user) & Q(receiver__username=room_name)) |
+            (Q(receiver=request.user) & Q(sender__username=room_name))
+        )
+        if search_query:
+            chats = chats.filter(Q(content__icontains=search_query))
+        chats = chats.order_by('timestamp')
+        
+        # For each user, get the last message exchanged with request.user.
+        user_last_messages = []
+        for user in users:
+            last_message = Message.objects.filter(
+                (Q(sender=request.user) & Q(receiver=user)) |
+                (Q(receiver=request.user) & Q(sender=user))
+            ).order_by('-timestamp').first()
+            serialized_last_message = MessageSerializer(last_message).data if last_message else None
+            user_last_messages.append({
+                'user': UserSerializer(user).data,
+                'last_message': serialized_last_message
+            })
+            
+        # Sort the last messages descending by timestamp (if exists)
+        user_last_messages.sort(
+            key=lambda x: x['last_message']['timestamp'] if x['last_message'] else '',
+            reverse=True
+        )
+        
+        response_data = {
+            'room_name': room_name,
+            'chats': MessageSerializer(chats, many=True).data,
+            'users': UserSerializer(users, many=True).data,
+            'user_last_messages': user_last_messages,
+            'search_query': search_query,
+        }
+        return Response(response_data)
     
+
+class UserSearchAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
     def get(self, request):
-        query = request.query_params.get("q", "")
-        User = get_user_model()
+        query = request.GET.get('q', '')
         if query:
             users = User.objects.filter(
                 Q(username__icontains=query) |
                 Q(first_name__icontains=query) |
                 Q(last_name__icontains=query)
-            ).exclude(id=request.user.id)
-            data = [{
-                "id": user.id,
-                "username": user.username,
-                "first_name": user.first_name,
-                "last_name": user.last_name
-            } for user in users]
-        else:
-            data = []
-        return Response(data, status=status.HTTP_200_OK)
-
-# New view to start or fetch an existing chat room between current user and target user.
-class ChatStartView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def post(self, request):
-        target_user_id = request.data.get("target_user_id")
-        if not target_user_id:
-            return Response({"error": "target_user_id is required."},
-                            status=status.HTTP_400_BAD_REQUEST)
-        User = get_user_model()
-        try:
-            target_user = User.objects.get(id=target_user_id)
-        except User.DoesNotExist:
-            return Response({"error": "User does not exist."}, status=status.HTTP_404_NOT_FOUND)
-        
-        # Look for an existing room containing both users.
-        room = ChatRoom.objects.filter(participants=request.user).filter(participants=target_user).first()
-        if not room:
-            room = ChatRoom.objects.create(
-                name=target_user.username  # Set the room name to the target user's username
             )
-            room.participants.add(request.user, target_user)
-            room.save()
-        serializer = ChatRoomSerializer(room)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            users = User.objects.none()
+        serializer = UserSerializer(users, many=True)
+        return Response(serializer.data)
+
+
+# New API view: returns distinct chats for the current user
+class AvailableChatsAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, format=None):
+        # Get all messages where the user is either sender or receiver
+        messages = Message.objects.filter(Q(sender=request.user) | Q(receiver=request.user)).order_by('-timestamp')
+        chats = {}
+        for msg in messages:
+            # Determine the conversation partner
+            partner = msg.receiver if msg.sender == request.user else msg.sender
+            # Use the partner's ID as key; first message encountered is the latest due to ordering
+            if partner.id not in chats:
+                chats[partner.id] = {
+                    'user': UserSerializer(partner).data,
+                    'last_message': MessageSerializer(msg).data,
+                }
+        return Response(list(chats.values()))

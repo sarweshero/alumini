@@ -1,18 +1,8 @@
 from django.urls import path
-from .views import (
-    ChatRoomListView,
-    ChatRoomCreateView,
-    ChatMessageListView,
-    ChatMessageCreateView,
-    ChatUserSearchView,       # new
-    ChatStartView             # new
-)
+from .views import ChatRoomAPIView, UserSearchAPIView, AvailableChatsAPIView
 
 urlpatterns = [
-    path('rooms/', ChatRoomListView.as_view(), name='chat-room-list'),
-    path('rooms/create/', ChatRoomCreateView.as_view(), name='chat-room-create'),
-    path('rooms/search/', ChatUserSearchView.as_view(), name='chat-user-search'),  # new endpoint
-    path('rooms/start/', ChatStartView.as_view(), name='chat-start'),              # new endpoint
-    path('rooms/<int:room_id>/messages/', ChatMessageListView.as_view(), name='chat-message-list'),
-    path('rooms/<int:room_id>/messages/create/', ChatMessageCreateView.as_view(), name='chat-message-create'),
+    path('rooms/<str:room_name>/messages/', ChatRoomAPIView.as_view(), name='chat_room_api'),
+    path('search/', UserSearchAPIView.as_view(), name='user_search'),
+    path('rooms/', AvailableChatsAPIView.as_view(), name='available_chats'),
 ]
