@@ -319,16 +319,20 @@ class EventDetailView(APIView):
 
     def put(self, request, pk):
         event = self.get_object(pk)
-        serializer = EventSerializer(event, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        if event.user == request.user or request.user.role in ["Staff", "Admin"]:
+            serializer = EventSerializer(event, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
 
     def delete(self, request, pk):
         event = self.get_object(pk)
-        event.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        if event.user == request.user or request.user.role in ["Staff", "Admin"]:
+            event.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
     
 class EventView(APIView):
     permission_classes = [permissions.IsAuthenticated]  # Change to IsAdminUser if necessary
@@ -406,16 +410,20 @@ class JobDetailView(APIView):
 
     def put(self, request, pk):
         job = self.get_object(pk)
-        serializer = JobsSerializer(job, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()  # Add additional permission checks if required
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        if job.user == request.user or request.user.role in ["Staff", "Admin"]:
+            serializer = JobsSerializer(job, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()  # Add additional permission checks if required
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
 
     def delete(self, request, pk):
         job = self.get_object(pk)
-        job.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        if job.user == request.user or request.user.role in ["Staff", "Admin"]:
+            job.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
 
 class JobImagesView(APIView):
     
@@ -485,15 +493,18 @@ class JobCommentDetailView(APIView):
 
     def put(self, request, pk):
         comment = self.get_object(pk)
-        if comment.user == request.user:
+        if comment.user == request.user or request.user.role in ["Staff", "Admin"]:
             serializer = JobCommentSerializer(comment, data=request.data, partial=True)
             if serializer.is_valid():
-                serializer.save()  # Optionally enforce that only the comment owner can update
+                serializer.save()
                 return Response(serializer.data, status=status.HTTP_200_OK)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
+        else:
+            return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+        
     def delete(self, request, pk):
-        if comment.user == request.user:
+        
+        if comment.user == request.user or request.user.role in ["Staff", "Admin"]:
             comment = self.get_object(pk)
             comment.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)

@@ -104,11 +104,7 @@ class PendingSignup(models.Model):
 
 def get_default_reaction():
     return {
-        "like": 0,
-        "love": 0,
-        "haha": 0,
-        "wow": 0,
-        "sad": 0
+        "love": 0
     }
 
 class LoginLog(models.Model):
@@ -130,6 +126,7 @@ class LoginLog(models.Model):
 class Events(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='events')
     uploaded_on = models.DateTimeField(auto_now_add=True)
+    description = models.TextField(blank=True)
     title = models.CharField(max_length=255)
     venue = models.CharField(max_length=255)
     from_date_time = models.DateTimeField(null=False)
@@ -156,11 +153,12 @@ class Jobs(models.Model):
       - Additional fields like salary_range and job_type are added.
     """
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='jobs')
-    company_name = models.CharField(max_length=255)
+    company_name = models.CharField(max_length=255,null=True, blank= True)
     posted_on = models.DateTimeField(auto_now_add=True)
-    location = models.CharField(max_length=255)
+    location = models.CharField(max_length=255, null=True, blank=True)
     role = models.CharField(max_length=255)
     description = models.TextField(blank=True)
+    isjob = models.BooleanField(default=False)
     salary_range = models.CharField(max_length=100, blank=True)
     job_type = models.CharField(max_length=100, blank=True)  # e.g., Full-Time, Part-Time
     views = models.PositiveIntegerField(default=0)

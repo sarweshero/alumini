@@ -11,7 +11,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 class MessageSerializer(serializers.ModelSerializer):
     sender_name = serializers.CharField(source='sender.username', read_only=True)
-    receiver_name = serializers.CharField(source='receiver.username', read_only=True)
+    time = serializers.DateTimeField(source='timestamp', format='%H:%M')
     
     class Meta:
         model = Message

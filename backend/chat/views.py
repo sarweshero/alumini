@@ -76,16 +76,37 @@ class AvailableChatsAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, format=None):
-        # Get all messages where the user is either sender or receiver
-        messages = Message.objects.filter(Q(sender=request.user) | Q(receiver=request.user)).order_by('-timestamp')
+        messages = Message.objects.filter(
+            Q(sender=request.user) | Q(receiver=request.user)
+        ).order_by('-timestamp')
+        
         chats = {}
         for msg in messages:
-            # Determine the conversation partner
             partner = msg.receiver if msg.sender == request.user else msg.sender
-            # Use the partner's ID as key; first message encountered is the latest due to ordering
+            room_name = "_".join(sorted([request.user.username, partner.username]))  # Generate room name
+            
             if partner.id not in chats:
                 chats[partner.id] = {
-                    'user': UserSerializer(partner).data,
-                    'last_message': MessageSerializer(msg).data,
+                    'id': partner.id,
+                    'name': f"{partner.first_name} {partner.last_name}",
+                    'room_name': room_name,  # Add this
+                    'lastMessage': msg.content if msg else "No messages",
+                    'time': msg.timestamp.isoformat() if msg else "",
+                    'user': UserSerializer(partner).data
                 }
         return Response(list(chats.values()))
+    
+class CreateMessageAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, receiver_id):
+        try:
+            receiver = User.objects.get(pk=receiver_id)
+            message = Message.objects.create(
+                sender=request.user,
+                receiver=receiver,
+                content=request.data['content']
+            )
+            return Response(MessageSerializer(message).data, status=201)
+        except User.DoesNotExist:
+            return Response({"error": "User not found"}, status=404)
