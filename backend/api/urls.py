@@ -26,6 +26,8 @@ urlpatterns = [
     path('jobs/comments/<int:pk>/', JobCommentDetailView.as_view(), name='job-comment-detail'),
     path('jobs/<int:job_id>/react/', JobReactionView.as_view(), name='job-react'),
     path('albums/<int:album_id>/images/', AlbumImagesView.as_view(), name='album-images'),
+    path('albums/', AlbumDetailView.as_view(), name='albums'),
+    # path('albums/<int:pk>/', AlbumImagesView.as_view(), name='albums'),
     path('myposts/', MyPostsView.as_view(), name='myposts'),
 ]
 

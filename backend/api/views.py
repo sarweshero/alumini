@@ -347,7 +347,7 @@ class EventView(APIView):
         data = request.data.copy()  # Create a shallow copy of the data
         data['role'] = request.user.role
         data['user'] = request.user.id 
-        serializer = EventSerializer(data=data,files=request.FILES)
+        serializer = EventSerializer(data=data)
         if serializer.is_valid():
             serializer.save(user=request.user)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -363,24 +363,21 @@ class JobListCreateView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def post(self, request):
-        # Handle job data
         job_data = request.data.copy()
-        images = request.FILES.getlist('images')  # Get list of uploaded images
+        images = request.FILES.getlist('images')
         job_data['uploaded_by'] = request.user.role
-        job_data['user'] = request.user.id  # Set the user field
         serializer = JobsSerializer(data=job_data)
         if serializer.is_valid():
-            job = serializer.save(role=request.user.role)
+            job = serializer.save(user=request.user, role=request.user.role)
             
             # Handle image uploads
             for image in images:
                 JobImage.objects.create(job=job, image=image)
-            
+
             # Re-serialize with images included
             updated_serializer = JobsSerializer(job)
             return Response(updated_serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)   
 
 class JobDetailView(APIView):
     """
@@ -577,18 +574,111 @@ class JobReactionView(APIView):
 
 class AlbumImagesView(APIView):
     permission_classes = [permissions.IsAuthenticated]
-    
-    def get(self, request, album_id):
+    parser_classes = (MultiPartParser, FormParser)
+
+    def get_object(self, pk):
         try:
-            album = models.Album.objects.get(id=album_id)
-        except models.Album.DoesNotExist:
-            return Response({"error": "Album not found."}, status=status.HTTP_404_NOT_FOUND)
-        
-        images = album.images.all()  # using related_name 'images'
+            return models.AlbumImage.objects.get(pk=pk)
+        except models.AlbumImage.DoesNotExist:
+            raise Http404
+
+    # Use album_id for listing images in an album.
+    def get(self, request, album_id):
+        images = models.AlbumImage.objects.filter(album__id=album_id)
         serializer = AlbumImageSerializer(images, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    # Use album_id parameter for uploading multiple images to the album.
+    def post(self, request, album_id):
+        try:
+            album = models.Album.objects.get(id=album_id)
+        except models.Album.DoesNotExist:
+            return Response({"error": "Album not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        images = request.FILES.getlist('images')
+        if not images:
+            return Response({"error": "No Image"}, status=status.HTTP_204_NO_CONTENT)
+        
+        created_images = []
+        for image in images:
+            serializer = AlbumImageSerializer(data={'image': image, 'album': album.id})
+            if serializer.is_valid():
+                serializer.save(album=album)
+                created_images.append(serializer.data)
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(created_images, status=status.HTTP_201_CREATED)
 
+    # For detail endpoints, keep using pk parameter.
+    def put(self, request, album_id):
+        album_image = self.get_object(album_id)
+        if album_image.album.user != request.user and request.user.role not in ["Staff", "Admin"]:
+            return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+        serializer = AlbumImageSerializer(album_image, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, album_id):
+        album_image = self.get_object(album_id)
+        if album_image.album.user != request.user and request.user.role not in ["Staff", "Admin"]:
+            return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+        album_image.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AlbumDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser)
+
+    def get(self, request):
+        albums = models.Album.objects.all().order_by("-id")
+        serializer = AlbumSerializer(albums, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def get_object(self, pk):
+        try:
+            return models.Album.objects.get(pk=pk)
+        except models.Album.DoesNotExist:
+            raise Http404
+
+    def post(self, request):
+        album_data = request.data.copy()
+        images = request.FILES.getlist('images')
+        serializer = AlbumSerializer(data=album_data)
+        serializer.is_valid(raise_exception=True)
+        album = serializer.save(user=request.user)
+        created_images = []
+        # Process each uploaded image and attach it to the album.
+        for image in images:
+            img_serializer = AlbumImageSerializer(data={'image': image, 'album': album.id})
+            if img_serializer.is_valid():
+                img_serializer.save(album=album)
+                created_images.append(img_serializer.data)
+            else:
+                return Response(img_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        response_data = serializer.data
+        response_data['images'] = created_images
+        return Response(response_data, status=status.HTTP_201_CREATED)
+
+    def put(self, request, pk):
+        album = self.get_object(pk)
+        if album.user != request.user and request.user.role not in ["Staff", "Admin"]:
+            return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+        serializer = AlbumSerializer(album, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk):
+        album = self.get_object(pk)
+        if album.user != request.user and request.user.role not in ["Staff", "Admin"]:
+            return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+        album.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    
 class MyPostsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     
