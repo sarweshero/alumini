@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, get_user_model
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status, permissions, serializers
+from rest_framework import status, permissions, generics
 from django.core.mail import send_mail
 from django.conf import settings
 from rest_framework.authtoken.models import Token  # our CustomTokenAuthentication works with this model
@@ -345,7 +345,7 @@ class EventView(APIView):
 
     def post(self, request):
         data = request.data.copy()  # Create a shallow copy of the data
-        data['role'] = request.user.role
+        data['uploaded_by'] = request.user.role
         data['user'] = request.user.id 
         serializer = EventSerializer(data=data)
         if serializer.is_valid():
@@ -686,3 +686,21 @@ class MyPostsView(APIView):
         jobs = Jobs.objects.filter(user=request.user).order_by('-posted_on')
         serializer = JobsSerializer(jobs, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+class UserLocationListCreateAPIView(generics.ListCreateAPIView):
+    serializer_class = UserLocationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return models.user_location.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+class UserLocationRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = UserLocationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'id'
+
+    def get_queryset(self):
+        return models.user_location.objects.filter(user=self.request.user)

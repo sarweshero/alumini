@@ -29,6 +29,8 @@ urlpatterns = [
     path('albums/', AlbumDetailView.as_view(), name='albums'),
     # path('albums/<int:pk>/', AlbumImagesView.as_view(), name='albums'),
     path('myposts/', MyPostsView.as_view(), name='myposts'),
+    path('user_locations/', UserLocationListCreateAPIView.as_view(), name='user_location_list_create'),
+    path('user_locations/<int:id>/', UserLocationRetrieveUpdateDestroyAPIView.as_view(), name='user_location_detail'),
 ]
 
 if settings.DEBUG:

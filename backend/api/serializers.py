@@ -100,3 +100,9 @@ class JobsSerializer(serializers.ModelSerializer):
 
     def get_total_comments(self, obj):
         return obj.comments.count()
+
+class UserLocationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.user_location
+        fields = ['id', 'user', 'latitude', 'longitude']
+        read_only_fields = ['id', 'user']

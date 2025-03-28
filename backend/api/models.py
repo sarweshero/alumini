@@ -135,7 +135,7 @@ class Events(models.Model):
     tag = models.CharField(max_length=255, blank=True)
     uploaded_by = models.CharField(
         max_length=10,
-        choices=[('Student', 'student'), ('staff', 'Staff'), ('admin', 'Admin')],
+        choices=[('Student', 'Student'), ('Staff', 'Staff'), ('Admin', 'Admin')],
         default='Student'
     )
 
@@ -179,6 +179,13 @@ class JobImage(models.Model):
     def __str__(self):
         return f"Image for {self.job.company_name} - {self.job.role}"
 
+class user_location(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='location')
+    latitude = models.CharField()
+    longitude = models.CharField()
+    def __str__(self):
+        return f"{self.user.username} - {self.location}"
+    
 
 class JobComment(models.Model):
     """
@@ -191,6 +198,7 @@ class JobComment(models.Model):
 
     def __str__(self):
         return f"Comment by {self.user.username} on {self.job.company_name} - {self.job.role}"
+
 
 
 class JobReaction(models.Model):
