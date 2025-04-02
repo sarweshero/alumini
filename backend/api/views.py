@@ -342,9 +342,12 @@ class EventView(APIView):
         events = Events.objects.all().order_by('-uploaded_on')
         serializer = EventSerializer(events, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
-
-    def post(self, request):
-        data = request.data.copy()  # Create a shallow copy of the data
+    
+    
+    def post(self, request, *args, **kwargs):
+        # Instead of copying with .copy() which attempts a deep copy,
+        # we convert request.data into a plain dict to avoid pickling issues.
+        data = dict(request.data)
         data['uploaded_by'] = request.user.role
         data['user'] = request.user.id 
         serializer = EventSerializer(data=data)

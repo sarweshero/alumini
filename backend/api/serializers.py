@@ -106,3 +106,17 @@ class UserLocationSerializer(serializers.ModelSerializer):
         model = models.user_location
         fields = ['id', 'user', 'latitude', 'longitude']
         read_only_fields = ['id', 'user']
+
+    def create(self, validated_data):
+        request = self.context.get('request')
+        if request:
+            user = request.user
+            try:
+                instance = models.user_location.objects.get(user=user)
+                instance.latitude = validated_data.get('latitude', instance.latitude)
+                instance.longitude = validated_data.get('longitude', instance.longitude)
+                instance.save()
+                return instance
+            except models.user_location.DoesNotExist:
+                return models.user_location.objects.create(user=user, **validated_data)
+        return super().create(validated_data)
