@@ -102,15 +102,21 @@ class JobsSerializer(serializers.ModelSerializer):
         return obj.comments.count()
 
 class UserLocationSerializer(serializers.ModelSerializer):
+
+    username = serializers.SerializerMethodField()
+    
     class Meta:
         model = models.user_location
-        fields = ['id', 'user', 'latitude', 'longitude']
-        read_only_fields = ['id', 'user']
+        fields = ['id', 'user', 'username', 'latitude', 'longitude']
+        read_only_fields = ['id', 'user', 'username']
 
+    def get_username(self, obj):
+        return obj.user.username
+    
     def create(self, validated_data):
         request = self.context.get('request')
         if request:
-            user = request.user
+            user = validated_data.pop('user', None) or self.context['request'].user
             try:
                 instance = models.user_location.objects.get(user=user)
                 instance.latitude = validated_data.get('latitude', instance.latitude)

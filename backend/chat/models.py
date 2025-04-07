@@ -4,12 +4,13 @@ from django.db import models
 
 User = get_user_model()
 
+
 class ChatRoom(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     users = models.ManyToManyField(User, related_name="chat_rooms")
     created_at = models.DateTimeField(auto_now_add=True)
 
-    def _str_(self):
+    def __str__(self):  # corrected __str__
         return f"ChatRoom ({', '.join(user.username for user in self.users.all())})"
 
 class Message(models.Model):
@@ -19,5 +20,5 @@ class Message(models.Model):
     content = models.TextField()
     timestamp = models.DateTimeField(auto_now_add=True)
 
-    def _str_(self):
+    def __str__(self):  # corrected __str__
         return f"Message from {self.sender.username}: {self.content[:20]}"

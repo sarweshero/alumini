@@ -159,6 +159,12 @@ class SignupView(APIView):
         if not email or not otp:
             return Response({"error": "Email and OTP required"}, status=status.HTTP_400_BAD_REQUEST)
         
+        # Check for required fields
+        required_fields = {"name": name, "college_name": college_name, "role": role, "phone": phone, "username": username, "password": password}
+        missing = [field for field, value in required_fields.items() if not value]
+        if missing:
+            return Response({"error": f"Missing required fields: {', '.join(missing)}"}, status=status.HTTP_400_BAD_REQUEST)
+        
         # Check if the username is already taken
         if CustomUser.objects.filter(username=username).exists():
             return Response({"error": "Username already taken."}, status=status.HTTP_400_BAD_REQUEST)
@@ -174,16 +180,19 @@ class SignupView(APIView):
         if timezone.now() - otp_entry.created_at > timedelta(minutes=5):
             otp_entry.delete()
             return Response({"error": "OTP has expired"}, status=status.HTTP_400_BAD_REQUEST)
-            
-        # Create or update pending signup details using the PendingSignup model
-        pending, created = models.PendingSignup.objects.get_or_create(email=email)
-        pending.name = name
-        pending.college_name = college_name
-        pending.role = role
-        pending.phone = phone
-        pending.username = username
-        pending.password = password
-        pending.save()
+        
+        # Use update_or_create to ensure pending signup data is set correctly.
+        pending, created = models.PendingSignup.objects.update_or_create(
+            email=email,
+            defaults={
+                'name': name,
+                'college_name': college_name,
+                'role': role,
+                'phone': phone,
+                'username': username,
+                'password': password,
+            }
+        )
 
         admin_email = 'sarweshwardeivasihamani@gmail.com'
         send_mail(
@@ -195,13 +204,14 @@ class SignupView(APIView):
         )
         otp_entry.delete()
         return Response({"message": "Signup request submitted. Await admin approval."}, status=status.HTTP_200_OK)
+
 class ApproveSignupView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
         pending = models.PendingSignup.objects.filter(is_approved=False)
         serializer = PendingSignupSerializer(pending, many=True)
-        return Response(serializer.data)
+        return Response(serializer.data)    
     
     def post(self, request, format=None):
         email = request.data.get("email")
@@ -333,7 +343,7 @@ class EventDetailView(APIView):
             event.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
         return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
-    
+
 class EventView(APIView):
     permission_classes = [permissions.IsAuthenticated]  # Change to IsAdminUser if necessary
     parser_classes = (MultiPartParser, FormParser)
@@ -343,11 +353,9 @@ class EventView(APIView):
         serializer = EventSerializer(events, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
-    
     def post(self, request, *args, **kwargs):
-        # Instead of copying with .copy() which attempts a deep copy,
-        # we convert request.data into a plain dict to avoid pickling issues.
-        data = dict(request.data)
+        # Use dict() instead of copy() to avoid deep-copying file objects.
+        data = request.data.dict()
         data['uploaded_by'] = request.user.role
         data['user'] = request.user.id 
         serializer = EventSerializer(data=data)
@@ -366,7 +374,8 @@ class JobListCreateView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def post(self, request):
-        job_data = request.data.copy()
+        # Convert QueryDict to a normal dict to avoid deepcopying file objects.
+        job_data = request.data.dict()
         images = request.FILES.getlist('images')
         job_data['uploaded_by'] = request.user.role
         serializer = JobsSerializer(data=job_data)
@@ -695,8 +704,7 @@ class UserLocationListCreateAPIView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return models.user_location.objects.filter(user=self.request.user)
-    
+        return models.user_location.objects.all()    
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
