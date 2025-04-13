@@ -13,13 +13,18 @@ class PendingSignupSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'college_name', 'role', 'phone', 'social_links', 'profile_photo', 'cover_photo', 'bio', 'contact_number', 'passed_out_year', 'current_work', 'previous_work', 'experience']
+        fields = [
+            'id', 'username', 'email', 'first_name', 'last_name', 
+            'college_name', 'role', 'phone', 'social_links', 
+            'profile_photo', 'cover_photo', 'bio', 'contact_number', 
+            'passed_out_year', 'current_work', 'Worked_in', 'experience'
+        ]
         extra_kwargs = {'password': {'write_only': True}}
 
 class LoginLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.LoginLog
-        fields = ['timestamp', 'ip_address', 'browser', 'browser_version', 'device', 'successful']
+        fields = ['id', 'user', 'user_agent', 'timestamp']
 class memberSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.CustomUser
@@ -29,14 +34,33 @@ class memberSerializer(serializers.ModelSerializer):
             'profile_photo', 'cover_photo', 'bio'
         ]
 
+class EventImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.EventImage
+        fields = ['id', 'image']
+
 class EventSerializer(serializers.ModelSerializer):
+    images = EventImageSerializer(many=True, required=False)
+    
     class Meta:
         model = models.Events
-        fields = '__all__'
+        fields = ['id', 'user', 'uploaded_on', 'description', 'title', 'venue', 'from_date_time', 'end_date_time', 'tag', 'uploaded_by', 'images']
 
     def create(self, validated_data):
-        return super().create(validated_data)
+        images_data = validated_data.pop('images', [])
+        event = models.Events.objects.create(**validated_data)
+        for image_data in images_data:
+            models.EventImage.objects.create(event=event, **image_data)
+        return event
 
+    def update(self, instance, validated_data):
+        images_data = validated_data.pop('images', None)
+        instance = super().update(instance, validated_data)
+        if images_data is not None:
+            instance.images.all().delete()
+            for image_data in images_data:
+                models.EventImage.objects.create(event=instance, **image_data)
+        return instance
 
 class JobImageSerializer(serializers.ModelSerializer):
     class Meta:
@@ -62,14 +86,15 @@ class JobCommentSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'job', 'user']
 
     def get_user(self, obj):
-        profile = getattr(obj.user, 'profile', None)
-        if profile:
+        # Check if obj.user exists and return user details directly
+        if obj.user:
             return {
-                "first_name": profile.first_name,
-                "last_name": profile.last_name,
-                "user": profile.user.username,
-                "profile_photo": profile.profile_photo.url if profile.profile_photo else ""
+                "first_name": obj.user.first_name,
+                "last_name": obj.user.last_name,
+                "username": obj.user.username,
+                "profile_photo": obj.user.profile_photo.url if obj.user.profile_photo else ""
             }
+        return None
 
 class JobsSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField() # Changed field: return profile info

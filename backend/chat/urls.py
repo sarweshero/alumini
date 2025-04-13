@@ -1,12 +1,8 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from . import views
-
-router = DefaultRouter()
-router.register(r'rooms', views.ChatRoomViewSet, basename='chat-rooms')
+from django.urls import path
+from .views import ChatRoomListCreateAPIView, MessageListCreateAPIView, ContactSearchAPIView
 
 urlpatterns = [
-    path('', include(router.urls)),
-    path('search/', views.ChatSearchView.as_view(), name='chat-search'),
-    path('rooms/<uuid:room_id>/messages/', views.ChatMessagesView.as_view(), name='chat-messages'),
+    path("rooms/", ChatRoomListCreateAPIView.as_view(), name="chat_rooms"),
+    path("rooms/<uuid:room_id>/messages/", MessageListCreateAPIView.as_view(), name="chat_messages"),
+    path("search/", ContactSearchAPIView.as_view(), name="contact_search"),
 ]

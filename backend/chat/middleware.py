@@ -1,23 +1,28 @@
-from channels.middleware import BaseMiddleware
-from django.contrib.auth.models import AnonymousUser
-from django.db import close_old_connections
-from rest_framework.authtoken.models import Token
 from urllib.parse import parse_qs
-from asgiref.sync import sync_to_async
+from django.contrib.auth.models import AnonymousUser
+from channels.db import database_sync_to_async
+from channels.auth import AuthMiddlewareStack
+from django.contrib.auth import get_user_model
+from rest_framework.authtoken.models import Token
 
-@sync_to_async
-def get_user_from_token(token):
-    try:
-        return Token.objects.get(key=token).user
-    except Token.DoesNotExist:
-        return AnonymousUser()
+class TokenAuthMiddleware:
+    def __init__(self, inner):
+        self.inner = inner
 
-class TokenAuthMiddleware(BaseMiddleware):
     async def __call__(self, scope, receive, send):
-        query_string = parse_qs(scope["query_string"].decode())
-        token = query_string.get("token", [None])[0]
+        query_string = scope.get("query_string", b"").decode()
+        query_params = parse_qs(query_string)
+        token_key = query_params.get("token")
+        if token_key:
+            token_key = token_key[0]
+            try:
+                token = await database_sync_to_async(Token.objects.get)(key=token_key)
+                scope["user"] = await database_sync_to_async(get_user_model().objects.get)(pk=token.user.pk)
+            except Exception:
+                scope["user"] = AnonymousUser()
+        else:
+            scope["user"] = AnonymousUser()
+        return await self.inner(scope, receive, send)
 
-        scope["user"] = await get_user_from_token(token)
-        close_old_connections()
-
-        return await super().__call__(scope, receive, send)
+def TokenAuthMiddlewareStack(inner):
+    return TokenAuthMiddleware(AuthMiddlewareStack(inner))
