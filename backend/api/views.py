@@ -695,7 +695,22 @@ class UserLocationRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPI
 class UserLocationsearchAPIView(generics.ListAPIView):
     serializer_class = UserLocationSerializer
     permission_classes = [permissions.IsAuthenticated]
-    
+
+    def get_queryset(self):
+        name = self.request.query_params.get("name", "")
+        if name:
+            from django.db.models import Q
+            return user_location.objects.filter(
+                Q(user__first_name__icontains=name) |
+                Q(user__last_name__icontains=name) |
+                Q(user__username__icontains=name)
+            )
+        return user_location.objects.none()
+
+    def list(self, _request, *_args, **_kwargs):
+        queryset = self.get_queryset()
+        results = list(queryset.values())
+        return Response(results, status=status.HTTP_200_OK)
 
 class ImportMembersAPIView(APIView):
     """

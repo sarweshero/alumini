@@ -32,8 +32,8 @@ urlpatterns = [
     # path('albums/<int:pk>/', AlbumImagesView.as_view(), name='albums'),
     path('myposts/', MyPostsView.as_view(), name='myposts'),
     path('user_locations/', UserLocationListCreateAPIView.as_view(), name='user_location_list_create'),
-    path('user_locations/<int:id>/', UserLocationRetrieveUpdateDestroyAPIView.as_view(), name='user_location_detail'),
-
+    path('user-location/<int:id>/', UserLocationRetrieveUpdateDestroyAPIView.as_view(), name='user_location_detail'),
+    path('user-location/search/', UserLocationsearchAPIView.as_view(), name='user_location_search'),
     path('members/import/', ImportMembersAPIView.as_view(), name='import_members'),
 ]
 
