@@ -19,7 +19,7 @@ class UserSerializer(serializers.ModelSerializer):
             'profile_type', 'roll_no', 'institution_name', 'course', 'stream',
             'course_start_year', 'course_end_year', 'employee_id', 'faculty_job_title',
             'faculty_institute', 'faculty_department', 'faculty_start_year', 'faculty_start_month',
-            'faculty_end_year', 'faculty_end_month', 'mobile_phone_no', 'home_phone_no',
+            'faculty_end_year', 'faculty_end_month', 'home_phone_no',
             'office_phone_no', 'current_location', 'home_town', 'correspondence_address',
             'correspondence_city', 'correspondence_state', 'correspondence_country',
             'correspondence_pincode', 'company', 'position', 'member_roles', 'educational_course', 'educational_institute',
@@ -27,7 +27,7 @@ class UserSerializer(serializers.ModelSerializer):
             'website_link', 'work_experience', 'professional_skills', 'industries_worked_in',
             'roles_played', 'chapter', 'college_name', 'role', 'phone', 'Address', 'city',
             'state', 'country', 'zip_code', 'branch', 'social_links', 'profile_photo',
-            'cover_photo', 'bio', 'contact_number', 'passed_out_year', 'current_work',
+            'cover_photo', 'bio', 'passed_out_year', 'current_work',
             'Worked_in', 'experience'
         ]
         extra_kwargs = {'password': {'write_only': True}}

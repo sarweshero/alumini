@@ -16,6 +16,7 @@ from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 import csv
 import os
+from django.db import models
 
 from .models import (
     Events, EventImage, LoginLog, SignupOTP, PendingSignup, Jobs, JobImage, JobComment,
@@ -118,7 +119,6 @@ class SignupView(APIView):
     def post(self, request):
         email = request.data.get("email")
         otp = request.data.get("otp")
-        # All fields except OTP and email
         user_fields = [f.name for f in PendingSignup._meta.fields if f.name not in ("id", "created_at", "is_approved", "approved_at", "username", "password", "email")]
         required_fields = ["name", "college_name", "role", "phone", "password"]
         missing = [field for field in required_fields if not request.data.get(field)]
@@ -140,13 +140,20 @@ class SignupView(APIView):
         pending_data['email'] = email
         pending_data['username'] = email
         pending_data['password'] = request.data.get("password")
+
+        # Convert all DateField empty strings to None
+        for field in PendingSignup._meta.fields:
+            if isinstance(field, (models.DateField, models.DateTimeField)):
+                if pending_data.get(field.name) == "":
+                    pending_data[field.name] = None
+
         pending, created = PendingSignup.objects.update_or_create(
             email=email,
             defaults=pending_data
         )
         otp_entry.delete()
         return Response({"message": "Signup request submitted. Await admin approval."}, status=status.HTTP_200_OK)
-
+    
 class ApproveSignupView(APIView):
     # permission_classes = [permissions.IsAdminUser]
     def get(self, request):
