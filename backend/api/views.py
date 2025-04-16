@@ -688,20 +688,12 @@ class UserLocationRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPI
     def get_queryset(self):
         return user_location.objects.filter(user=self.request.user)
 
-
-import csv
-import os
-from django.conf import settings
-from django.contrib.auth import get_user_model
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-
 class ImportMembersAPIView(APIView):
     """
     POST: Import registered members from members.csv into the CustomUser model.
     Email is used as username. Date of Birth is set as password (in 'YYYY-MM-DD' format).
     All available fields from the CSV are mapped to the CustomUser model.
+    If the row is a faculty, set role='Staff' and is_staff=True.
     """
     def post(self, request):
         User = get_user_model()
@@ -731,7 +723,6 @@ class ImportMembersAPIView(APIView):
                     "registered_on": row.get('Registered On', '').strip(),
                     "approved_on": row.get('Approved On', '').strip(),
                     "profile_updated_on": row.get('Profile Updated On', '').strip(),
-                    "admin_note": row.get('Admin Note', '').strip(),
                     "profile_type": row.get('Profile Type', '').strip(),
                     "roll_no": row.get('Roll No', '').strip(),
                     "institution_name": row.get('Institution Name', '').strip(),
@@ -766,7 +757,6 @@ class ImportMembersAPIView(APIView):
                     "end_year": row.get('End Year', '').strip(),
                     "facebook_link": row.get('Facebook Link', '').strip(),
                     "linkedin_link": row.get('LinkedIn Link', '').strip(),
-                    "twitter_link": row.get('Twitter Link', '').strip(),
                     "website_link": row.get('Website Link', '').strip(),
                     "work_experience": float(row.get('Work Experience(in years)', '0').strip() or 0),
                     "chapter": row.get('chapter', '').strip(),
@@ -788,7 +778,13 @@ class ImportMembersAPIView(APIView):
                     "Website": row.get('Website Link', '').strip(),
                 }
 
-                # Try to get or create user
+                # Set role and is_staff for faculty
+                profile_type = row.get('Profile Type', '').strip().lower()
+                label = row.get('Label', '').strip().lower()
+                if profile_type == 'faculty' or label == 'faculty':
+                    user_data['role'] = 'Staff'
+                    user_data['is_staff'] = True
+
                 try:
                     user = User.objects.get(email=email)
                     for k, v in user_data.items():
