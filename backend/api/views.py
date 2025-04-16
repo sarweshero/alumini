@@ -666,9 +666,13 @@ class MyPostsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     def get(self, request):
         jobs = Jobs.objects.filter(user=request.user).order_by('-posted_on')
-        serializer = JobsSerializer(jobs, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
+        jobs_serializer = JobsSerializer(jobs, many=True)
+        events = Events.objects.filter(user=request.user).order_by('-uploaded_on')
+        events_serializer = EventSerializer(events, many=True)
+        return Response({
+            "jobs": jobs_serializer.data,
+            "events": events_serializer.data
+        }, status=status.HTTP_200_OK)
 
 # ----- User Location Endpoints -----
 
@@ -687,6 +691,11 @@ class UserLocationRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPI
     lookup_field = 'id'
     def get_queryset(self):
         return user_location.objects.filter(user=self.request.user)
+    
+class UserLocationsearchAPIView(generics.ListAPIView):
+    serializer_class = UserLocationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
 
 class ImportMembersAPIView(APIView):
     """
@@ -714,7 +723,7 @@ class ImportMembersAPIView(APIView):
                     "username": username,
                     "email": email,
                     "salutation": row.get('Salutation', '').strip(),
-                    "name": row.get('Name', '').strip(),
+                    "first_name": row.get('Name', '').strip(),
                     "gender": row.get('Gender', '').strip(),
                     "date_of_birth": row.get('Date of Birth', '').strip() or None,
                     "label": row.get('Label', '').strip(),

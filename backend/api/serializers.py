@@ -14,10 +14,21 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'id', 'username', 'email', 'first_name', 'last_name', 
-            'college_name', 'role', 'phone', 'social_links', 
-            'profile_photo', 'cover_photo', 'bio', 'contact_number', 
-            'passed_out_year', 'current_work', 'Worked_in', 'experience'
+            'id', 'username', 'email', 'first_name', 'last_name',
+            'salutation', 'name', 'gender', 'date_of_birth', 'label', 'secondary_email',
+            'profile_type', 'roll_no', 'institution_name', 'course', 'stream',
+            'course_start_year', 'course_end_year', 'employee_id', 'faculty_job_title',
+            'faculty_institute', 'faculty_department', 'faculty_start_year', 'faculty_start_month',
+            'faculty_end_year', 'faculty_end_month', 'mobile_phone_no', 'home_phone_no',
+            'office_phone_no', 'current_location', 'home_town', 'correspondence_address',
+            'correspondence_city', 'correspondence_state', 'correspondence_country',
+            'correspondence_pincode', 'company', 'position', 'member_roles', 'educational_course', 'educational_institute',
+            'start_year', 'end_year', 'facebook_link', 'linkedin_link', 'twitter_link',
+            'website_link', 'work_experience', 'professional_skills', 'industries_worked_in',
+            'roles_played', 'chapter', 'college_name', 'role', 'phone', 'Address', 'city',
+            'state', 'country', 'zip_code', 'branch', 'social_links', 'profile_photo',
+            'cover_photo', 'bio', 'contact_number', 'passed_out_year', 'current_work',
+            'Worked_in', 'experience'
         ]
         extra_kwargs = {'password': {'write_only': True}}
 
@@ -126,17 +137,21 @@ class JobsSerializer(serializers.ModelSerializer):
     def get_total_comments(self, obj):
         return obj.comments.count()
 
+
 class UserLocationSerializer(serializers.ModelSerializer):
 
-    username = serializers.SerializerMethodField()
-    
+    user_details = serializers.SerializerMethodField()
+
     class Meta:
         model = models.user_location
-        fields = ['id', 'user', 'username', 'latitude', 'longitude']
-        read_only_fields = ['id', 'user', 'username']
+        fields = ['id', 'user', 'user_details', 'latitude', 'longitude']
+        read_only_fields = ['id', 'user', 'user_details']
 
-    def get_username(self, obj):
-        return obj.user.username
+    def get_user_details(self, obj):
+        user = obj.user
+        if user:
+            return UserSerializer(user).data
+        return None
     
     def create(self, validated_data):
         request = self.context.get('request')
