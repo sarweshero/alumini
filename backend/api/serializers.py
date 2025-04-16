@@ -16,8 +16,8 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
             'salutation', 'name', 'gender', 'date_of_birth', 'label', 'secondary_email',
-            'profile_type', 'roll_no', 'institution_name', 'course', 'stream',
-            'course_start_year', 'course_end_year', 'employee_id', 'faculty_job_title',
+            'profile_type', 'roll_no', 'course', 'stream',
+            'course_start_year', 'course_end_year', 'faculty_job_title',
             'faculty_institute', 'faculty_department', 'faculty_start_year', 'faculty_start_month',
             'faculty_end_year', 'faculty_end_month', 'home_phone_no',
             'office_phone_no', 'current_location', 'home_town', 'correspondence_address',
