@@ -166,7 +166,7 @@ class PendingSignup(models.Model):
     linkedin_link = models.URLField(blank=True)
     twitter_link = models.URLField(blank=True)
     website_link = models.URLField(blank=True)
-    work_experience = models.FloatField(null=True, blank=True)
+    work_experience = models.FloatField(null=True, blank=True, default=0.0)
     professional_skills = models.JSONField(default=list, blank=True)
     industries_worked_in = models.JSONField(default=list, blank=True)
     roles_played = models.JSONField(default=list, blank=True)
