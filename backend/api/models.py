@@ -3,23 +3,78 @@ from django.contrib.auth import get_user_model
 from phonenumber_field.modelfields import PhoneNumberField
 from django.contrib.auth.models import AbstractUser, Group, Permission
 
+
+def default_reaction():
+    return {"like": 0}
+
 def get_default_social_links():
     return {
         "Github": "",
         "LinkedIn": "",
         "Instagram": "",
         "Facebook": "",
-        "X": ""
+        "X": "",
+        "Website": ""
     }
 
-def default_reaction():
-    return {"like": 0}
-
 class CustomUser(AbstractUser):
+    # Basic Info
+    salutation = models.CharField(max_length=20, blank=True)
+    name = models.CharField(max_length=255, blank=True)
+    gender = models.CharField(max_length=10, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    label = models.CharField(max_length=255, blank=True)
+    email = models.EmailField(unique=True)
+    secondary_email = models.EmailField(blank=True)
+    registered = models.CharField(max_length=10, blank=True)
+    registered_on = models.CharField(max_length=20, blank=True)
+    approved_on = models.CharField(max_length=20, blank=True)
+    profile_updated_on = models.CharField(max_length=20, blank=True)
+    admin_note = models.TextField(blank=True)
+    profile_type = models.CharField(max_length=50, blank=True)
+    roll_no = models.CharField(max_length=100, blank=True)
+    institution_name = models.CharField(max_length=500, blank=True)
+    course = models.CharField(max_length=255, blank=True)
+    stream = models.CharField(max_length=255, blank=True)
+    course_start_year = models.CharField(max_length=10, blank=True)
+    course_end_year = models.CharField(max_length=10, blank=True)
+    employee_id = models.CharField(max_length=100, blank=True)
+    faculty_job_title = models.CharField(max_length=255, blank=True)
+    faculty_institute = models.CharField(max_length=255, blank=True)
+    faculty_department = models.CharField(max_length=255, blank=True)
+    faculty_start_year = models.CharField(max_length=10, blank=True)
+    faculty_start_month = models.CharField(max_length=10, blank=True)
+    faculty_end_year = models.CharField(max_length=10, blank=True)
+    faculty_end_month = models.CharField(max_length=10, blank=True)
+    mobile_phone_no = models.CharField(max_length=30, blank=True)
+    home_phone_no = models.CharField(max_length=30, blank=True)
+    office_phone_no = models.CharField(max_length=30, blank=True)
+    current_location = models.CharField(max_length=255, blank=True)
+    home_town = models.CharField(max_length=255, blank=True)
+    correspondence_address = models.TextField(blank=True)
+    correspondence_city = models.CharField(max_length=255, blank=True)
+    correspondence_state = models.CharField(max_length=255, blank=True)
+    correspondence_country = models.CharField(max_length=255, blank=True)
+    correspondence_pincode = models.CharField(max_length=20, blank=True)
+    company = models.CharField(max_length=255, blank=True)
+    position = models.CharField(max_length=255, blank=True)
+    member_roles = models.CharField(max_length=255, blank=True)
+    educational_course = models.CharField(max_length=255, blank=True)
+    educational_institute = models.CharField(max_length=255, blank=True)
+    start_year = models.CharField(max_length=10, blank=True)
+    end_year = models.CharField(max_length=10, blank=True)
+    facebook_link = models.URLField(blank=True)
+    linkedin_link = models.URLField(blank=True)
+    twitter_link = models.URLField(blank=True)
+    website_link = models.URLField(blank=True)
+    work_experience = models.FloatField(null=True, blank=True)
+    professional_skills = models.JSONField(default=list, blank=True)
+    industries_worked_in = models.JSONField(default=list, blank=True)
+    roles_played = models.JSONField(default=list, blank=True)
+    chapter = models.CharField(max_length=255, blank=True)
     college_name = models.CharField(max_length=500, blank=True)
     role = models.CharField(max_length=50, blank=True)
     phone = models.CharField(max_length=20, blank=True)
-    course = models.CharField(max_length=255, blank=True)
     Address = models.CharField(max_length=255, blank=True)
     city = models.CharField(max_length=255, blank=True)
     state = models.CharField(max_length=255, blank=True)
@@ -32,24 +87,21 @@ class CustomUser(AbstractUser):
     bio = models.TextField(max_length=500, blank=True)
     contact_number = PhoneNumberField(blank=True)
     passed_out_year = models.CharField(max_length=20, null=True, blank=True)
-    professional_skills = models.JSONField(default=list, blank=True)
     current_work = models.CharField(max_length=255, blank=True)
     Worked_in = models.JSONField(default=list, blank=True)
-    roles_played = models.JSONField(default=list, blank=True)
     experience = models.JSONField(default=list, blank=True)
-    chapter = models.CharField(max_length=255, blank=True)
 
+    # Django auth fields
     groups = models.ManyToManyField(
         Group,
-        related_name="customuser_set",  # Custom reverse accessor
+        related_name="customuser_set",
         blank=True,
         help_text="The groups this user belongs to.",
         verbose_name="groups"
     )
-    
     user_permissions = models.ManyToManyField(
         Permission,
-        related_name="customuser_set",  # Custom reverse accessor
+        related_name="customuser_set",
         blank=True,
         help_text="Specific permissions for this user.",
         verbose_name="user permissions"
@@ -77,11 +129,63 @@ class SignupOTP(models.Model):
         return f"Signup OTP for {self.email}: {self.code}"
 
 class PendingSignup(models.Model):
-    name = models.CharField(max_length=255)
-    college_name = models.CharField(max_length=500)
-    role = models.CharField(max_length=50)
-    phone = models.CharField(max_length=20)
+    # Basic Info
+    salutation = models.CharField(max_length=20, blank=True)
+    name = models.CharField(max_length=255, blank=True)
+    gender = models.CharField(max_length=10, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    label = models.CharField(max_length=255, blank=True)
+    email = models.EmailField(null=True)
+    secondary_email = models.EmailField(blank=True)
+    registered = models.CharField(max_length=10, blank=True)
+    registered_on = models.CharField(max_length=20, blank=True)
+    approved_on = models.CharField(max_length=20, blank=True)
+    profile_updated_on = models.CharField(max_length=20, blank=True)
+    admin_note = models.TextField(blank=True)
+    profile_type = models.CharField(max_length=50, blank=True)
+    roll_no = models.CharField(max_length=100, blank=True)
+    institution_name = models.CharField(max_length=500, blank=True)
     course = models.CharField(max_length=255, blank=True)
+    stream = models.CharField(max_length=255, blank=True)
+    course_start_year = models.CharField(max_length=10, blank=True)
+    course_end_year = models.CharField(max_length=10, blank=True)
+    employee_id = models.CharField(max_length=100, blank=True)
+    faculty_job_title = models.CharField(max_length=255, blank=True)
+    faculty_institute = models.CharField(max_length=255, blank=True)
+    faculty_department = models.CharField(max_length=255, blank=True)
+    faculty_start_year = models.CharField(max_length=10, blank=True)
+    faculty_start_month = models.CharField(max_length=10, blank=True)
+    faculty_end_year = models.CharField(max_length=10, blank=True)
+    faculty_end_month = models.CharField(max_length=10, blank=True)
+    mobile_phone_no = models.CharField(max_length=30, blank=True)
+    home_phone_no = models.CharField(max_length=30, blank=True)
+    office_phone_no = models.CharField(max_length=30, blank=True)
+    current_location = models.CharField(max_length=255, blank=True)
+    home_town = models.CharField(max_length=255, blank=True)
+    correspondence_address = models.TextField(blank=True)
+    correspondence_city = models.CharField(max_length=255, blank=True)
+    correspondence_state = models.CharField(max_length=255, blank=True)
+    correspondence_country = models.CharField(max_length=255, blank=True)
+    correspondence_pincode = models.CharField(max_length=20, blank=True)
+    company = models.CharField(max_length=255, blank=True)
+    position = models.CharField(max_length=255, blank=True)
+    member_roles = models.CharField(max_length=255, blank=True)
+    educational_course = models.CharField(max_length=255, blank=True)
+    educational_institute = models.CharField(max_length=255, blank=True)
+    start_year = models.CharField(max_length=10, blank=True)
+    end_year = models.CharField(max_length=10, blank=True)
+    facebook_link = models.URLField(blank=True)
+    linkedin_link = models.URLField(blank=True)
+    twitter_link = models.URLField(blank=True)
+    website_link = models.URLField(blank=True)
+    work_experience = models.FloatField(null=True, blank=True)
+    professional_skills = models.JSONField(default=list, blank=True)
+    industries_worked_in = models.JSONField(default=list, blank=True)
+    roles_played = models.JSONField(default=list, blank=True)
+    chapter = models.CharField(max_length=255, blank=True)
+    college_name = models.CharField(max_length=500, blank=True)
+    role = models.CharField(max_length=50, blank=True)
+    phone = models.CharField(max_length=20, blank=True)
     Address = models.CharField(max_length=255, blank=True)
     city = models.CharField(max_length=255, blank=True)
     state = models.CharField(max_length=255, blank=True)
@@ -94,17 +198,14 @@ class PendingSignup(models.Model):
     bio = models.TextField(max_length=500, blank=True)
     contact_number = PhoneNumberField(blank=True)
     passed_out_year = models.CharField(max_length=20, null=True, blank=True)
-    professional_skills = models.JSONField(default=list, blank=True)
     current_work = models.CharField(max_length=255, blank=True)
     Worked_in = models.JSONField(default=list, blank=True)
-    roles_played = models.JSONField(default=list, blank=True)
     experience = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    chapter = models.CharField(max_length=255, blank=True)
     is_approved = models.BooleanField(default=False)
     approved_at = models.DateTimeField(null=True, blank=True)
     username = models.CharField(max_length=150, unique=True)
-    password = models.CharField(max_length=128) 
+    password = models.CharField(max_length=128)
 
     def __str__(self):
         return f"PendingSignup: {self.email}"

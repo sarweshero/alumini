@@ -14,6 +14,8 @@ from rest_framework.authtoken.models import Token
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
+import csv
+import os
 
 from .models import (
     Events, EventImage, LoginLog, SignupOTP, PendingSignup, Jobs, JobImage, JobComment,
@@ -68,9 +70,13 @@ class StaffLoginView(APIView):
 
 class UserLoginView(APIView):
     def post(self, request):
-        username = request.data.get("username")
+        email = request.data.get("username")
         password = request.data.get("password")
-        user = authenticate(username=username, password=password)
+        try:
+            user_obj = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({"error": "Invalid credentials"}, status=status.HTTP_400_BAD_REQUEST)
+        user = authenticate(username=user_obj.username, password=password)
         if user:
             token, _ = Token.objects.get_or_create(user=user)
             user.last_login = timezone.now()
@@ -112,44 +118,34 @@ class SignupView(APIView):
     def post(self, request):
         email = request.data.get("email")
         otp = request.data.get("otp")
-        required_fields = ["name", "college_name", "role", "phone", "username", "password"]
+        # All fields except OTP and email
+        user_fields = [f.name for f in PendingSignup._meta.fields if f.name not in ("id", "created_at", "is_approved", "approved_at", "username", "password", "email")]
+        required_fields = ["name", "college_name", "role", "phone", "password"]
         missing = [field for field in required_fields if not request.data.get(field)]
-        
+
         if not email or not otp or missing:
             error_msg = "Email and OTP required." if not email or not otp else f"Missing fields: {', '.join(missing)}"
             return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if User.objects.filter(username=request.data.get("username")).exists() or \
-           PendingSignup.objects.filter(username=request.data.get("username")).exists():
-            return Response({"error": "Username already taken."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if User.objects.filter(email=email).exists() or PendingSignup.objects.filter(email=email).exists():
+            return Response({"error": "Email already taken."}, status=status.HTTP_400_BAD_REQUEST)
 
         otp_entry = SignupOTP.objects.filter(email=email, code=otp).order_by('-created_at').first()
         if not otp_entry or (timezone.now() - otp_entry.created_at > timedelta(minutes=5)):
             if otp_entry:
                 otp_entry.delete()
             return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
-        
+
+        pending_data = {field: request.data.get(field, "") for field in user_fields}
+        pending_data['email'] = email
+        pending_data['username'] = email
+        pending_data['password'] = request.data.get("password")
         pending, created = PendingSignup.objects.update_or_create(
             email=email,
-            defaults={
-                'name': request.data.get("name"),
-                'college_name': request.data.get("college_name"),
-                'role': request.data.get("role"),
-                'phone': request.data.get("phone"),
-                'username': request.data.get("username"),
-                'password': request.data.get("password"),
-            }
-        )
-        send_mail(
-            'New Signup Approval Needed',
-            f'New signup details:\nEmail: {email}\nName: {request.data.get("name")}\nCollege: {request.data.get("college_name")}\nRole: {request.data.get("role")}\nPhone: {request.data.get("phone")}',
-            settings.EMAIL_HOST_USER,
-            ['sarweshwardeivasihamani@gmail.com'],
-            fail_silently=False,
+            defaults=pending_data
         )
         otp_entry.delete()
         return Response({"message": "Signup request submitted. Await admin approval."}, status=status.HTTP_200_OK)
-
 
 class ApproveSignupView(APIView):
     # permission_classes = [permissions.IsAdminUser]
@@ -171,20 +167,18 @@ class ApproveSignupView(APIView):
         pending.approved_at = timezone.now()
         pending.save()
 
-        user = User.objects.create_user(
-            username=pending.username,
-            email=pending.email,
-            password=pending.password
-        )
-        user.first_name = pending.name
-        user.college_name = pending.college_name
-        user.role = pending.role
-        user.phone = pending.phone
+        # Copy all fields from PendingSignup to User
+        user_fields = [f.name for f in User._meta.fields if f.name not in ("id", "last_login", "date_joined", "password")]
+        user_data = {field: getattr(pending, field, None) for field in user_fields}
+        user_data['username'] = pending.email
+        user_data['email'] = pending.email
+        user = User(**user_data)
+        user.set_password(pending.password)
         user.save()
-        
+
         send_mail(
             'Your Account Has Been Approved',
-            f'Your account has been approved.\nUsername: {pending.username}',
+            f'Your account has been approved.\nUsername: {pending.email}',
             settings.EMAIL_HOST_USER,
             [pending.email],
             fail_silently=False,
@@ -209,7 +203,7 @@ class ApproveSignupView(APIView):
         )
         pending.delete()
         return Response({"message": "Pending signup request deleted"}, status=status.HTTP_200_OK)
-
+    
 
 class ChangePasswordView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -693,3 +687,127 @@ class UserLocationRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPI
     lookup_field = 'id'
     def get_queryset(self):
         return user_location.objects.filter(user=self.request.user)
+
+
+import csv
+import os
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+
+class ImportMembersAPIView(APIView):
+    """
+    POST: Import registered members from members.csv into the CustomUser model.
+    Email is used as username. Date of Birth is set as password (in 'YYYY-MM-DD' format).
+    All available fields from the CSV are mapped to the CustomUser model.
+    """
+    def post(self, request):
+        User = get_user_model()
+        csv_path = os.path.join(settings.BASE_DIR, 'members.csv')
+        created, updated, skipped = [], [], []
+        with open(csv_path, newline='', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                email = row.get('email_id', '').strip().lower()
+                if not email:
+                    skipped.append("No email in row")
+                    continue
+                username = email
+                dob = row.get('Date of Birth', '').strip()
+                password = dob if dob else 'defaultpassword'
+                # Prepare user data mapping
+                user_data = {
+                    "username": username,
+                    "email": email,
+                    "salutation": row.get('Salutation', '').strip(),
+                    "name": row.get('Name', '').strip(),
+                    "gender": row.get('Gender', '').strip(),
+                    "date_of_birth": row.get('Date of Birth', '').strip() or None,
+                    "label": row.get('Label', '').strip(),
+                    "secondary_email": row.get('Secondary Email', '').strip(),
+                    "registered": row.get('Registered', '').strip(),
+                    "registered_on": row.get('Registered On', '').strip(),
+                    "approved_on": row.get('Approved On', '').strip(),
+                    "profile_updated_on": row.get('Profile Updated On', '').strip(),
+                    "admin_note": row.get('Admin Note', '').strip(),
+                    "profile_type": row.get('Profile Type', '').strip(),
+                    "roll_no": row.get('Roll No', '').strip(),
+                    "institution_name": row.get('Institution Name', '').strip(),
+                    "course": row.get('Course', '').strip(),
+                    "stream": row.get('Stream', '').strip(),
+                    "course_start_year": row.get('Course Start Year', '').strip(),
+                    "course_end_year": row.get('Course End Year', '').strip(),
+                    "employee_id": row.get('Employee ID', '').strip(),
+                    "faculty_job_title": row.get('Faculty: Job Title', '').strip(),
+                    "faculty_institute": row.get('Faculty: Institute', '').strip(),
+                    "faculty_department": row.get('Faculty: Department', '').strip(),
+                    "faculty_start_year": row.get('Faculty: Start Year', '').strip(),
+                    "faculty_start_month": row.get('Faculty: Start Month', '').strip(),
+                    "faculty_end_year": row.get('Faculty: End Year', '').strip(),
+                    "faculty_end_month": row.get('Faculty: End Month', '').strip(),
+                    "mobile_phone_no": row.get('Mobile Phone No.', '').strip(),
+                    "home_phone_no": row.get('Home Phone No.', '').strip(),
+                    "office_phone_no": row.get('Office Phone No.', '').strip(),
+                    "current_location": row.get('Current Location', '').strip(),
+                    "home_town": row.get('Home Town', '').strip(),
+                    "correspondence_address": row.get('Correspondence Address', '').strip(),
+                    "correspondence_city": row.get('Correspondence City', '').strip(),
+                    "correspondence_state": row.get('Correspondence State', '').strip(),
+                    "correspondence_country": row.get('Correspondence Country', '').strip(),
+                    "correspondence_pincode": row.get('Correspondence Pincode', '').strip(),
+                    "company": row.get('Company', '').strip(),
+                    "position": row.get('Position', '').strip(),
+                    "member_roles": row.get('Member Roles', '').strip(),
+                    "educational_course": row.get('Educational Course', '').strip(),
+                    "educational_institute": row.get('Educational Institute', '').strip(),
+                    "start_year": row.get('Start Year', '').strip(),
+                    "end_year": row.get('End Year', '').strip(),
+                    "facebook_link": row.get('Facebook Link', '').strip(),
+                    "linkedin_link": row.get('LinkedIn Link', '').strip(),
+                    "twitter_link": row.get('Twitter Link', '').strip(),
+                    "website_link": row.get('Website Link', '').strip(),
+                    "work_experience": float(row.get('Work Experience(in years)', '0').strip() or 0),
+                    "chapter": row.get('chapter', '').strip(),
+                }
+                # JSON fields
+                for field, csv_field in [
+                    ('professional_skills', 'Professional Skills'),
+                    ('industries_worked_in', 'Industries Worked In'),
+                    ('roles_played', 'Roles Played')
+                ]:
+                    val = row.get(csv_field, '').strip()
+                    user_data[field] = [v.strip() for v in val.split(',')] if val else []
+
+                # Social links as JSON
+                user_data['social_links'] = {
+                    "Facebook": row.get('Facebook Link', '').strip(),
+                    "LinkedIn": row.get('LinkedIn Link', '').strip(),
+                    "Twitter": row.get('Twitter Link', '').strip(),
+                    "Website": row.get('Website Link', '').strip(),
+                }
+
+                # Try to get or create user
+                try:
+                    user = User.objects.get(email=email)
+                    for k, v in user_data.items():
+                        setattr(user, k, v)
+                    if password:
+                        user.set_password(password)
+                    user.save()
+                    updated.append(email)
+                except User.DoesNotExist:
+                    user = User(**user_data)
+                    user.set_password(password)
+                    user.save()
+                    created.append(email)
+                except Exception as e:
+                    skipped.append(f"{email} ({str(e)})")
+
+        return Response({
+            "created": created,
+            "updated": updated,
+            "skipped": skipped,
+            "message": f"{len(created)} users created, {len(updated)} updated, {len(skipped)} skipped."
+        }, status=status.HTTP_201_CREATED)

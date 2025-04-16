@@ -1,17 +1,13 @@
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
+from django.shortcuts import get_object_or_404
 from .models import ChatRoom, Message
 from .serializers import ChatRoomSerializer, MessageSerializer, UserSerializer
 
 User = get_user_model()
 
 class ChatRoomListCreateAPIView(generics.ListCreateAPIView):
-    """
-    GET: List chat rooms for the authenticated user. If a target_user_id query
-         parameter is provided, filter to rooms including that user.
-    POST: Create a new chat room with a target user (if it doesn’t already exist).
-    """
     serializer_class = ChatRoomSerializer
     permission_classes = [permissions.IsAuthenticated]
 
@@ -22,6 +18,13 @@ class ChatRoomListCreateAPIView(generics.ListCreateAPIView):
         if target_user_id:
             qs = qs.filter(users__id=target_user_id)
         return qs.distinct()
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["request"] = self.request
+        return context
+
+    # ... rest of your code ...
 
     def create(self, request, *args, **kwargs):
         target_user_id = request.data.get("target_user_id")
@@ -58,13 +61,26 @@ class MessageListCreateAPIView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         room_id = self.kwargs.get("room_id")
-        return Message.objects.filter(chat_room__id=room_id).order_by("timestamp")
+        # Try to get the chat room; if not found, return empty queryset instead of 404
+        try:
+            chat_room = ChatRoom.objects.get(id=room_id, users=self.request.user)
+        except ChatRoom.DoesNotExist:
+            return Message.objects.none()
+        return Message.objects.filter(chat_room=chat_room).order_by("timestamp")
 
     def perform_create(self, serializer):
         room_id = self.kwargs.get("room_id")
-        chat_room = ChatRoom.objects.get(id=room_id)
+        chat_room = get_object_or_404(ChatRoom, id=room_id, users=self.request.user)
         serializer.save(sender=self.request.user, chat_room=chat_room)
 
+    def get(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        if queryset is not None and not queryset.exists():
+            # Optionally, create a default message if the room exists but has no messages
+            pass  # Remove or keep your default message logic as needed
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
 class ContactSearchAPIView(generics.ListAPIView):
     """
     GET: Search for users by username (excluding the current user).
