@@ -203,7 +203,8 @@ class ApproveSignupView(APIView):
                     value = None
             user_data[field.name] = value
 
-        user_data['username'] = pending.email
+        # Preserve the provided username instead of forcing email as username
+        user_data['username'] = pending.username  
         user_data['email'] = pending.email
 
         # Set required boolean fields
@@ -211,7 +212,8 @@ class ApproveSignupView(APIView):
         user_data['is_active'] = True
         user_data['is_staff'] = (pending.role.lower() == "staff")
 
-        user = User(**user_data)
+        # Use custom manager if available; otherwise, create the user normally
+        user = User.objects.create_user(**user_data)  # or use .create(**user_data)
         user.set_password(pending.password)
         user.save()
 
@@ -220,7 +222,7 @@ class ApproveSignupView(APIView):
         pending.save()
         send_mail(
             'Your Account Has Been Approved',
-            f'Your account has been approved.\nUsername: {pending.email}',
+            f'Your account has been approved.\nUsername: {pending.username}',
             settings.EMAIL_HOST_USER,
             [pending.email],
             fail_silently=False,
