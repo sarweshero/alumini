@@ -300,6 +300,6 @@ class Album(models.Model):
 class AlbumImage(models.Model):
     album = models.ForeignKey(Album, on_delete=models.CASCADE, related_name='images')
     image = models.FileField(upload_to='album_images/')
-
+    description = models.CharField(max_length=255, blank=True)
     def __str__(self):
         return f"Image for album: {self.album.title}"
