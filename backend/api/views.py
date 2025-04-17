@@ -187,9 +187,15 @@ class ApproveSignupView(APIView):
         except PendingSignup.DoesNotExist:
             return Response({"error": "Pending signup not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Copy all fields from PendingSignup to User
+        # Copy all fields from PendingSignup to User, replacing None with ""
         user_fields = [f.name for f in User._meta.fields if f.name not in ("id", "last_login", "date_joined", "password")]
-        user_data = {field: getattr(pending, field, None) for field in user_fields}
+        user_data = {}
+        for field in user_fields:
+            value = getattr(pending, field, "")
+            if value is None:
+                value = ""
+            user_data[field] = value
+        
         user_data['username'] = pending.email
         user_data['email'] = pending.email
 
