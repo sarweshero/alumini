@@ -49,8 +49,11 @@ INSTALLED_APPS = [
     'django_user_agents',
 ]
 
+
 # CORS configuration
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',  # should be at the top

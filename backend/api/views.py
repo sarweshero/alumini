@@ -66,17 +66,25 @@ class AdminLoginView(APIView):
 
 class StaffLoginView(APIView):
     def post(self, request):
-        username = request.data.get("username")
+        identifier = request.data.get("username")
         password = request.data.get("password")
-        user = authenticate(username=username, password=password)
+        user = None
+
+        # Allow login by email or username
+        if identifier and ("@" in identifier or "." in identifier):
+            try:
+                user_obj = User.objects.get(email=identifier)
+                user = authenticate(username=user_obj.username, password=password)
+            except User.DoesNotExist:
+                user = None
+        else:
+            user = authenticate(username=identifier, password=password)
+
         if user and user.is_staff:
             token, _ = Token.objects.get_or_create(user=user)
-            LoginLog.objects.create(
-                user=user
-                )
+            LoginLog.objects.create(user=user)
             return Response({"token": token.key, "user": user.username, "role": user.role}, status=status.HTTP_200_OK)
         return Response({"error": "Invalid credentials or not staff"}, status=status.HTTP_400_BAD_REQUEST)
-
 
 class UserLoginView(APIView):
     def post(self, request):
