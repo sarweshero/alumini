@@ -144,7 +144,8 @@ class SignupView(APIView):
         email = request.data.get("email")
         otp = request.data.get("otp")
         username = request.data.get("username", email)
-        user_fields = [f.first_name for f in PendingSignup._meta.fields if f.name not in ("id", "created_at", "is_approved", "approved_at", "username", "password", "email")]
+        # Use field names instead of f.first_name
+        user_fields = [f.name for f in PendingSignup._meta.fields if f.name not in ("id", "created_at", "is_approved", "approved_at", "username", "password", "email")]
         required_fields = ["first_name", "college_name", "role", "phone", "password"]
         missing = [field for field in required_fields if not request.data.get(field)]
 
