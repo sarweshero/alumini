@@ -136,6 +136,7 @@ class SignupView(APIView):
     def post(self, request):
         email = request.data.get("email")
         otp = request.data.get("otp")
+        username = request.data.get("username", email)
         user_fields = [f.name for f in PendingSignup._meta.fields if f.name not in ("id", "created_at", "is_approved", "approved_at", "username", "password", "email")]
         required_fields = ["name", "college_name", "role", "phone", "password"]
         missing = [field for field in required_fields if not request.data.get(field)]
@@ -147,6 +148,9 @@ class SignupView(APIView):
         if User.objects.filter(email=email).exists() or PendingSignup.objects.filter(email=email).exists():
             return Response({"error": "Email already taken."}, status=status.HTTP_400_BAD_REQUEST)
 
+        if User.objects.filter(username=username).exists() or PendingSignup.objects.filter(username=username).exists():
+            return Response({"error": "Username already taken."}, status=status.HTTP_400_BAD_REQUEST)
+
         otp_entry = SignupOTP.objects.filter(email=email, code=otp).order_by('-created_at').first()
         if not otp_entry or (timezone.now() - otp_entry.created_at > timedelta(minutes=5)):
             if otp_entry:
@@ -155,7 +159,7 @@ class SignupView(APIView):
 
         pending_data = {field: request.data.get(field, "") for field in user_fields}
         pending_data['email'] = email
-        pending_data['username'] = email
+        pending_data['username'] = username
         pending_data['password'] = request.data.get("password")
 
         # Convert all DateField empty strings to None
@@ -164,7 +168,7 @@ class SignupView(APIView):
                 if pending_data.get(field.name) == "":
                     pending_data[field.name] = None
 
-        pending, created = PendingSignup.objects.update_or_create(
+        PendingSignup.objects.update_or_create(
             email=email,
             defaults=pending_data
         )
