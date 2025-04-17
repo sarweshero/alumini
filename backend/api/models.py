@@ -127,7 +127,8 @@ class SignupOTP(models.Model):
 class PendingSignup(models.Model):
     # Basic Info
     salutation = models.CharField(max_length=20, blank=True)
-    name = models.CharField(max_length=255, blank=True)
+    first_name = models.CharField(max_length=255, blank=True)
+    last_name = models.CharField(max_length=255, blank=True)
     gender = models.CharField(max_length=10, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     label = models.CharField(max_length=255, blank=True)

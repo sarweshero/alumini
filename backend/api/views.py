@@ -88,13 +88,20 @@ class StaffLoginView(APIView):
 
 class UserLoginView(APIView):
     def post(self, request):
-        email = request.data.get("username")
+        identifier = request.data.get("username")
         password = request.data.get("password")
-        try:
-            user_obj = User.objects.get(email=email)
-        except User.DoesNotExist:
-            return Response({"error": "Invalid credentials"}, status=status.HTTP_400_BAD_REQUEST)
-        user = authenticate(username=user_obj.username, password=password)
+        user = None
+
+        # Allow login by email or username
+        if identifier and ("@" in identifier or "." in identifier):
+            try:
+                user_obj = User.objects.get(email=identifier)
+                user = authenticate(username=user_obj.username, password=password)
+            except User.DoesNotExist:
+                user = None
+        else:
+            user = authenticate(username=identifier, password=password)
+
         if user:
             token, _ = Token.objects.get_or_create(user=user)
             user.last_login = timezone.now()
@@ -137,8 +144,8 @@ class SignupView(APIView):
         email = request.data.get("email")
         otp = request.data.get("otp")
         username = request.data.get("username", email)
-        user_fields = [f.name for f in PendingSignup._meta.fields if f.name not in ("id", "created_at", "is_approved", "approved_at", "username", "password", "email")]
-        required_fields = ["name", "college_name", "role", "phone", "password"]
+        user_fields = [f.first_name for f in PendingSignup._meta.fields if f.name not in ("id", "created_at", "is_approved", "approved_at", "username", "password", "email")]
+        required_fields = ["first_name", "college_name", "role", "phone", "password"]
         missing = [field for field in required_fields if not request.data.get(field)]
 
         if not email or not otp or missing:
@@ -152,7 +159,7 @@ class SignupView(APIView):
             return Response({"error": "Username already taken."}, status=status.HTTP_400_BAD_REQUEST)
 
         otp_entry = SignupOTP.objects.filter(email=email, code=otp).order_by('-created_at').first()
-        if not otp_entry or (timezone.now() - otp_entry.created_at > timedelta(minutes=5)):
+        if not otp_entry or (timezone.now() - otp_entry.created_at > timedelta(minutes=30)):
             if otp_entry:
                 otp_entry.delete()
             return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
