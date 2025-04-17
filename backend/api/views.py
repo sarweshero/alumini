@@ -43,14 +43,23 @@ class UserLoginHistoryView(APIView):
 
 class AdminLoginView(APIView):
     def post(self, request):
-        username = request.data.get("username")
+        identifier = request.data.get("username")
         password = request.data.get("password")
-        user = authenticate(username=username, password=password)
+        user = None
+
+        # Try to get user by email if identifier contains '@'
+        if identifier and ("@" in identifier or "." in identifier):
+            try:
+                user_obj = User.objects.get(email=identifier)
+                user = authenticate(username=user_obj.username, password=password)
+            except User.DoesNotExist:
+                user = None
+        else:
+            user = authenticate(username=identifier, password=password)
+
         if user and user.is_superuser:
             token, _ = Token.objects.get_or_create(user=user)
-            LoginLog.objects.create(
-                user=user
-            )
+            LoginLog.objects.create(user=user)
             return Response({"token": token.key, "user": user.username, "role": user.role}, status=status.HTTP_200_OK)
         return Response({"error": "Invalid credentials or not admin"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -169,20 +178,25 @@ class ApproveSignupView(APIView):
             pending = PendingSignup.objects.get(email=email, is_approved=False)
         except PendingSignup.DoesNotExist:
             return Response({"error": "Pending signup not found"}, status=status.HTTP_404_NOT_FOUND)
-        
-        pending.is_approved = True
-        pending.approved_at = timezone.now()
-        pending.save()
 
         # Copy all fields from PendingSignup to User
         user_fields = [f.name for f in User._meta.fields if f.name not in ("id", "last_login", "date_joined", "password")]
         user_data = {field: getattr(pending, field, None) for field in user_fields}
         user_data['username'] = pending.email
         user_data['email'] = pending.email
+
+        # Set required boolean fields
+        user_data['is_superuser'] = False
+        user_data['is_active'] = True
+        user_data['is_staff'] = (pending.role.lower() == "staff")
+
         user = User(**user_data)
         user.set_password(pending.password)
         user.save()
 
+        pending.is_approved = True
+        pending.approved_at = timezone.now()
+        pending.save()
         send_mail(
             'Your Account Has Been Approved',
             f'Your account has been approved.\nUsername: {pending.email}',
