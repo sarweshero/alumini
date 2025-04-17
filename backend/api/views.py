@@ -187,15 +187,18 @@ class ApproveSignupView(APIView):
         except PendingSignup.DoesNotExist:
             return Response({"error": "Pending signup not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Copy all fields from PendingSignup to User, replacing None with ""
-        user_fields = [f.name for f in User._meta.fields if f.name not in ("id", "last_login", "date_joined", "password")]
         user_data = {}
-        for field in user_fields:
-            value = getattr(pending, field, "")
+        # Iterate over all user fields except these fields
+        for field in [f for f in User._meta.fields if f.name not in ("id", "last_login", "date_joined", "password")]:
+            value = getattr(pending, field.name, "")
             if value is None:
                 value = ""
-            user_data[field] = value
-        
+            # For date fields, convert empty string to None
+            if isinstance(field, (models.DateField, models.DateTimeField)):
+                if value == "":
+                    value = None
+            user_data[field.name] = value
+
         user_data['username'] = pending.email
         user_data['email'] = pending.email
 
