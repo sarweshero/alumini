@@ -66,7 +66,7 @@ class ChatRoomListCreateAPIView(generics.ListCreateAPIView):
                             status=status.HTTP_404_NOT_FOUND)
         room.delete()
         return Response({"detail": "Chat room deleted successfully."},
-                        status=status.HTTP_204_NO_CONTENT)
+                        status=status.HTTP_200_OK)
 
 class MessageListCreateAPIView(generics.ListCreateAPIView):
     """
