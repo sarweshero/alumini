@@ -542,22 +542,49 @@ class JobCommentDetailView(APIView):
 
 # ----- Home & Reaction Endpoints -----
 
+from datetime import date, timedelta
+from django.utils import timezone
+
 class HomePageDataView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     def get(self, request):
-        latest_events = Events.objects.all().order_by('-uploaded_on')[:5]
-        events_serializer = EventSerializer(latest_events, many=True)
+        now = timezone.now()
+        today = now.date()
+        # Upcoming Events: filter events starting in the future, order by from_date_time ascending
+        upcoming_events = Events.objects.filter(from_date_time__gte=now).order_by('from_date_time')[:5]
+        events_serializer = EventSerializer(upcoming_events, many=True)
+        
         latest_jobs = Jobs.objects.all().order_by('-posted_on')[:5]
         jobs_serializer = JobsSerializer(latest_jobs, many=True)
+        
         latest_album_images = Album.objects.all().order_by('-id')[:10]
         album_images_serializer = AlbumSerializer(latest_album_images, many=True)
+        
+        # Upcoming Birthdays: compute next birthday for each user with a non-null date_of_birth
+        users_with_birthday = User.objects.exclude(date_of_birth__isnull=True)
+        upcoming_birthdays_list = []
+        for user in users_with_birthday:
+            dob = user.date_of_birth
+            this_year_birthday = dob.replace(year=today.year)
+            # If birthday already passed this year, use next year's birthday
+            if this_year_birthday < today:
+                next_birthday = dob.replace(year=today.year + 1)
+            else:
+                next_birthday = this_year_birthday
+            delta = (next_birthday - today).days
+            upcoming_birthdays_list.append((delta, user))
+        upcoming_birthdays_list.sort(key=lambda x: x[0])
+        upcoming_birthdays = [UserSerializer(user).data for _, user in upcoming_birthdays_list[:5]]
+        
         latest_members = User.objects.filter(role='Student').order_by('-id')[:60]
         members_serializer = UserSerializer(latest_members, many=True)
+        
         return Response({
-            'latest_events': events_serializer.data,
+            'upcoming_events': events_serializer.data,
             'latest_jobs': jobs_serializer.data,
             'latest_album_images': album_images_serializer.data,
             'latest_members': members_serializer.data,
+            'upcoming_birthdays': upcoming_birthdays,
         }, status=status.HTTP_200_OK)
 
 
