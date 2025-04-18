@@ -7,7 +7,7 @@ User = get_user_model()
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ("id", "username", "first_name", "last_name")
+        fields = ("id", "username", "first_name", "last_name", "profile_photo")
 
 class MessageSerializer(serializers.ModelSerializer):
     text = serializers.CharField(source="content")
