@@ -54,6 +54,20 @@ class ChatRoomListCreateAPIView(generics.ListCreateAPIView):
         else:
             return Response(serializer.data, status=status.HTTP_200_OK)
 
+    def delete(self, request, *args, **kwargs):
+        room_id = request.query_params.get("room_id")
+        if not room_id:
+            return Response({"detail": "room_id is required for deletion."},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            room = ChatRoom.objects.get(id=room_id, users=request.user)
+        except ChatRoom.DoesNotExist:
+            return Response({"detail": "Chat room not found."},
+                            status=status.HTTP_404_NOT_FOUND)
+        room.delete()
+        return Response({"detail": "Chat room deleted successfully."},
+                        status=status.HTTP_204_NO_CONTENT)
+
 class MessageListCreateAPIView(generics.ListCreateAPIView):
     """
     GET: List messages for a specific chat room.
@@ -64,7 +78,6 @@ class MessageListCreateAPIView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         room_id = self.kwargs.get("room_id")
-        # Try to get the chat room; if not found, return empty queryset instead of 404
         try:
             chat_room = ChatRoom.objects.get(id=room_id, users=self.request.user)
         except ChatRoom.DoesNotExist:
@@ -78,12 +91,20 @@ class MessageListCreateAPIView(generics.ListCreateAPIView):
 
     def get(self, request, *args, **kwargs):
         queryset = self.get_queryset()
-        if queryset is not None and not queryset.exists():
-            # Optionally, create a default message if the room exists but has no messages
-            pass  # Remove or keep your default message logic as needed
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
-    
+
+# New view for message detail (supports PUT and DELETE)
+class MessageDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = MessageSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_field = "id"
+
+    def get_queryset(self):
+        room_id = self.kwargs.get("room_id")
+        chat_room = get_object_or_404(ChatRoom, id=room_id, users=self.request.user)
+        return Message.objects.filter(chat_room=chat_room)
+
 class ContactSearchAPIView(generics.ListAPIView):
     """
     GET: Search for users by username (excluding the current user).
