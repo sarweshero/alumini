@@ -24,7 +24,14 @@ class ChatRoomListCreateAPIView(generics.ListCreateAPIView):
         context["request"] = self.request
         return context
 
-    # ... rest of your code ...
+    def get_or_create_chat_room(self, user, target_user):
+        # Check if a chat room already exists for both users.
+        qs = ChatRoom.objects.filter(users=user).filter(users=target_user)
+        if qs.exists():
+            return qs.first(), False
+        room = ChatRoom.objects.create()
+        room.users.add(user, target_user)
+        return room, True
 
     def create(self, request, *args, **kwargs):
         target_user_id = request.data.get("target_user_id")
@@ -39,17 +46,13 @@ class ChatRoomListCreateAPIView(generics.ListCreateAPIView):
             return Response(
                 {"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND
             )
-        # Check if a chat room already exists with the target user.
         user = request.user
-        existing_rooms = ChatRoom.objects.filter(users=user).filter(users=target_user)
-        if existing_rooms.exists():
-            serializer = self.get_serializer(existing_rooms.first(), context={"request": request})
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        # Otherwise, create a new room.
-        room = ChatRoom.objects.create()
-        room.users.add(user, target_user)
+        room, created = self.get_or_create_chat_room(user, target_user)
         serializer = self.get_serializer(room, context={"request": request})
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        if created:
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            return Response(serializer.data, status=status.HTTP_200_OK)
 
 class MessageListCreateAPIView(generics.ListCreateAPIView):
     """
