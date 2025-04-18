@@ -37,14 +37,14 @@ class ChatRoomListCreateAPIView(generics.ListCreateAPIView):
         target_user_id = request.data.get("target_user_id")
         if not target_user_id:
             return Response(
-                {"detail": "target_user_id is required."},
+                {"error": "target_user_id is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         try:
             target_user = User.objects.get(id=target_user_id)
         except User.DoesNotExist:
             return Response(
-                {"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND
+                {"error": "User not found."}, status=status.HTTP_404_NOT_FOUND
             )
         user = request.user
         room, created = self.get_or_create_chat_room(user, target_user)
@@ -57,12 +57,12 @@ class ChatRoomListCreateAPIView(generics.ListCreateAPIView):
     def delete(self, request, *args, **kwargs):
         room_id = request.query_params.get("room_id")
         if not room_id:
-            return Response({"detail": "room_id is required for deletion."},
+            return Response({"error": "room_id is required for deletion."},
                             status=status.HTTP_400_BAD_REQUEST)
         try:
             room = ChatRoom.objects.get(id=room_id, users=request.user)
         except ChatRoom.DoesNotExist:
-            return Response({"detail": "Chat room not found."},
+            return Response({"error": "Chat room not found."},
                             status=status.HTTP_404_NOT_FOUND)
         room.delete()
         return Response({"detail": "Chat room deleted successfully."},
@@ -104,6 +104,19 @@ class MessageDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         room_id = self.kwargs.get("room_id")
         chat_room = get_object_or_404(ChatRoom, id=room_id, users=self.request.user)
         return Message.objects.filter(chat_room=chat_room)
+    
+    def put(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=False)
+        if serializer.is_valid():
+            self.perform_update(serializer)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def delete(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response({"detail": "Message deleted successfully."}, status=status.HTTP_200_OK)
 
 class ContactSearchAPIView(generics.ListAPIView):
     """
