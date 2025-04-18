@@ -551,11 +551,11 @@ class HomePageDataView(APIView):
         now = timezone.now()
         today = now.date()
         # Upcoming Events: filter events starting in the future, order by from_date_time ascending
-        upcoming_events = Events.objects.filter(from_date_time__gte=now).order_by('from_date_time')[:5]
+        upcoming_events = Events.objects.filter(from_date_time__gte=now).order_by('from_date_time')[:10]
         events_serializer = EventSerializer(upcoming_events, many=True)
         
-        latest_jobs = Jobs.objects.all().order_by('-posted_on')[:5]
-        jobs_serializer = JobsSerializer(latest_jobs, many=True)
+        # latest_jobs = Jobs.objects.all().order_by('-posted_on')[:5]
+        # jobs_serializer = JobsSerializer(latest_jobs, many=True)
         
         latest_album_images = Album.objects.all().order_by('-id')[:10]
         album_images_serializer = AlbumSerializer(latest_album_images, many=True)
@@ -574,14 +574,14 @@ class HomePageDataView(APIView):
             delta = (next_birthday - today).days
             upcoming_birthdays_list.append((delta, user))
         upcoming_birthdays_list.sort(key=lambda x: x[0])
-        upcoming_birthdays = [UserSerializer(user).data for _, user in upcoming_birthdays_list[:5]]
+        upcoming_birthdays = [UserSerializer(user).data for _, user in upcoming_birthdays_list[:20]]
         
         latest_members = User.objects.filter(role='Student').order_by('-id')[:60]
         members_serializer = UserSerializer(latest_members, many=True)
         
         return Response({
             'upcoming_events': events_serializer.data,
-            'latest_jobs': jobs_serializer.data,
+            # 'latest_jobs': jobs_serializer.data,
             'latest_album_images': album_images_serializer.data,
             'latest_members': members_serializer.data,
             'upcoming_birthdays': upcoming_birthdays,
