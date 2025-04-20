@@ -19,6 +19,7 @@ urlpatterns = [
     path('events/<int:pk>', EventDetailView.as_view(), name='events'),
     path('events/', EventView.as_view(), name='events'),
     path('profile/<str:username>', UserProfileView.as_view(), name='profile-views'),
+    path('member-profiles', LatestMembersView.as_view(), name='user-posts'),
     path('home/', HomePageDataView.as_view(), name='home_page_data'),
     # Jobs endpoints
     path('jobs/', JobListCreateView.as_view(), name='jobs-list-create'),

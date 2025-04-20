@@ -588,6 +588,13 @@ class HomePageDataView(APIView):
             'chapters': chapters
         }, status=status.HTTP_200_OK)
 
+class LatestMembersView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        latest_members = User.objects.filter(role='Student').order_by('-id')[:60]
+        serializer = UserSerializer(latest_members, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class JobReactionView(APIView):
