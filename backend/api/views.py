@@ -149,6 +149,12 @@ class ForgotPasswordView(APIView):
 class ResetPasswordView(APIView):
     permission_classes = [permissions.AllowAny]
 
+    def get(self, request):
+        # Render the password reset UI when accessed via GET
+        uid = request.GET.get("uid", "")
+        token = request.GET.get("token", "")
+        return render(request, "reset_password.html", {"uid": uid, "token": token})
+    
     def post(self, request):
         uid = request.data.get("uid")
         token = request.data.get("token")
