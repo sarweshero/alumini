@@ -21,8 +21,7 @@ urlpatterns = [
     path('profile/<str:username>', UserProfileView.as_view(), name='profile-views'),
     path('member-profiles/', LatestMembersView.as_view(), name='user-posts'),
     path('home/', HomePageDataView.as_view(), name='home_page_data'),
-    path('birthdays/',BirthdayListView.as_view(), name='Birthdays') # New endpoint for birthday list
-    # Jobs endpoints
+    path('birthdays/',BirthdayListView.as_view(), name='Birthdays'),
     path('jobs/', JobListCreateView.as_view(), name='jobs-list-create'),
     path('jobs/<int:pk>/', JobDetailView.as_view(), name='job-detail'),
     path('jobs/<int:job_id>/images/', JobImagesView.as_view(), name='job-images'),  # New endpoint
