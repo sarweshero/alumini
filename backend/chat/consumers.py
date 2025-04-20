@@ -25,14 +25,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
     async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+        if hasattr(self, "room_group_name") and self.room_group_name:
+            await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
     async def receive(self, text_data):
         data = json.loads(text_data)
         action = data.get("action")
         if action == "create_room":
             target_user_id = data.get("target_user_id")
-            room, created = await self.get_or_create_chat_room(self.user, target_user_id)
+            room, _ = await self.get_or_create_chat_room(self.user, target_user_id)
             if room:
                 # Optionally join the newly created room's group.
                 self.room_id = room.id
