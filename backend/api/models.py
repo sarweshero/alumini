@@ -8,14 +8,7 @@ def default_reaction():
     return {"like": 0}
 
 def get_default_social_links():
-    return {
-        "Github": "",
-        "LinkedIn": "",
-        "Instagram": "",
-        "Facebook": "",
-        "X": "",
-        "Website": ""
-    }
+    return {}
 
 class CustomUser(AbstractUser):
     # Basic Info
