@@ -48,7 +48,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             message_text = data.get("message")
             if self.room_id and message_text:
                 message = await self.create_message(self.user, self.room_id, message_text)
-                # Broadcast the message to the room group.
+                # Broadcast the message to the room group with timestamp.
                 await self.channel_layer.group_send(
                     self.room_group_name,
                     {
@@ -56,6 +56,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                         "message": message_text,
                         "sender": self.user.username,
                         "message_id": str(message.id),
+                        "timestamp": message.timestamp.isoformat(),
                     },
                 )
         elif action == "list_rooms":  # new action to list chat rooms
