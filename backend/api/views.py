@@ -17,6 +17,7 @@ from django.utils.encoding import force_bytes, force_str
 import csv
 import os
 from django.db import models
+from django.template.loader import render_to_string
 
 from .models import (
     Events, EventImage, LoginLog, SignupOTP, PendingSignup, Jobs, JobImage, JobComment,
@@ -118,6 +119,53 @@ class LogoutView(APIView):
     def post(self, request):
         request.user.auth_token.delete()
         return Response({'status': 'logged out'}, status=status.HTTP_200_OK)
+
+
+class ForgotPasswordView(APIView):
+    permission_classes = [permissions.AllowAny]  # Allow unauthenticated access
+
+    def post(self, request):
+        email = request.data.get("email")
+        if not email:
+            return Response({"error": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({"error": "User with this email does not exist."}, status=status.HTTP_404_NOT_FOUND)
+        
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+        reset_link = request.build_absolute_uri(f"/reset-password/?uid={uid}&token={token}")
+        
+        # Alternatively, you could use a template for the email body:
+        # email_body = render_to_string("reset_password.html", {"uid": uid, "token": token, "reset_link": reset_link})
+        subject = "Reset Your Password"
+        message = f"Please click the following link to reset your password:\n{reset_link}"
+        send_mail(subject, message, settings.EMAIL_HOST_USER, [email], fail_silently=False)
+        
+        return Response({"message": "Password reset link sent to your email."}, status=status.HTTP_200_OK)
+
+
+class ResetPasswordView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        uid = request.data.get("uid")
+        token = request.data.get("token")
+        new_password = request.data.get("new_password")
+        if not uid or not token or not new_password:
+            return Response({"error": "uid, token and new_password are required."},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            user_id = urlsafe_base64_decode(uid).decode()
+            user = User.objects.get(pk=user_id)
+        except (User.DoesNotExist, ValueError, TypeError):
+            return Response({"error": "Invalid uid."}, status=status.HTTP_400_BAD_REQUEST)
+        if not default_token_generator.check_token(user, token):
+            return Response({"error": "Invalid or expired token."}, status=status.HTTP_400_BAD_REQUEST)
+        user.set_password(new_password)
+        user.save()
+        return Response({"message": "Password reset successful."}, status=status.HTTP_200_OK)
 
 
 # ----- Signup & Approval Endpoints -----
@@ -269,67 +317,6 @@ class ChangePasswordView(APIView):
         return Response({'status': 'Password changed successfully'}, status=status.HTTP_200_OK)
 
 
-class ForgotPasswordView(APIView):
-    """
-    Accepts an email, generates a password reset token and UID,
-    then sends an email with these reset details (or returns them in response).
-    """
-    def post(self, request):
-        email = request.data.get("email")
-        if not email:
-            return Response({"error": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            return Response({"error": "No user found with this email."}, status=status.HTTP_404_NOT_FOUND)
-        
-        uid = urlsafe_base64_encode(force_bytes(user.pk))
-        token = default_token_generator.make_token(user)
-        reset_link = f"{request.scheme}://{request.get_host()}/reset-password/?uid={uid}&token={token}"
-        
-        # Send email with reset link:
-        send_mail(
-            'Password Reset Request',
-            f'Click the link below to reset your password:\n{reset_link}',
-            settings.EMAIL_HOST_USER,
-            [email],
-            fail_silently=False,
-        )
-        return Response({"message": "Password reset link has been sent to your email."},
-                        status=status.HTTP_200_OK)
-
-
-class ResetPasswordView(APIView):
-    """
-    Template-based view to reset the password.
-    GET: Render reset password form with a green and white theme.
-    POST: Process the form submission and reset the user's password.
-    """
-    def get(self, request):
-        uid = request.GET.get("uid", "")
-        token = request.GET.get("token", "")
-        return render(request, "reset_password.html", {"uid": uid, "token": token})
-    
-    def post(self, request):
-        uid = request.data.get("uid")
-        token = request.data.get("token")
-        new_password = request.data.get("new_password")
-        
-        if not uid or not token or not new_password:
-            return Response({"error": "uid, token, and new_password are required."},
-                            status=status.HTTP_400_BAD_REQUEST)
-        try:
-            uid_int = force_str(urlsafe_base64_decode(uid))
-            user = User.objects.get(pk=uid_int)
-        except (User.DoesNotExist, ValueError, TypeError, OverflowError):
-            return Response({"error": "Invalid UID."}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if not default_token_generator.check_token(user, token):
-            return Response({"error": "Invalid or expired token."}, status=status.HTTP_400_BAD_REQUEST)
-        
-        user.set_password(new_password)
-        user.save()
-        return Response({"message": "Password has been reset successfully."}, status=status.HTTP_200_OK)
 
 # ----- Profile Endpoints -----
 
@@ -550,23 +537,21 @@ class HomePageDataView(APIView):
     def get(self, request):
         now = timezone.now()
         today = now.date()
-        # Upcoming Events: filter events starting in the future, order by from_date_time ascending
+        
+        # Upcoming Events
         upcoming_events = Events.objects.filter(from_date_time__gte=now).order_by('from_date_time')[:10]
         events_serializer = EventSerializer(upcoming_events, many=True)
         
-        # latest_jobs = Jobs.objects.all().order_by('-posted_on')[:5]
-        # jobs_serializer = JobsSerializer(latest_jobs, many=True)
-        
+        # Latest Album Images 
         latest_album_images = Album.objects.all().order_by('-id')[:10]
         album_images_serializer = AlbumSerializer(latest_album_images, many=True)
         
-        # Upcoming Birthdays: compute next birthday for each user with a non-null date_of_birth
+        # Upcoming Birthdays
         users_with_birthday = User.objects.exclude(date_of_birth__isnull=True)
         upcoming_birthdays_list = []
         for user in users_with_birthday:
             dob = user.date_of_birth
             this_year_birthday = dob.replace(year=today.year)
-            # If birthday already passed this year, use next year's birthday
             if this_year_birthday < today:
                 next_birthday = dob.replace(year=today.year + 1)
             else:
@@ -576,15 +561,31 @@ class HomePageDataView(APIView):
         upcoming_birthdays_list.sort(key=lambda x: x[0])
         upcoming_birthdays = [UserSerializer(user).data for _, user in upcoming_birthdays_list[:20]]
         
+        # Latest Members
         latest_members = User.objects.filter(role='Student').order_by('-id')[:60]
         members_serializer = UserSerializer(latest_members, many=True)
         
+        # Batch Mates - Get users from same passed_out_year as current user
+        batch_mates = []
+        if request.user.passed_out_year:
+            batch_mates = User.objects.filter(
+                passed_out_year=request.user.passed_out_year
+            ).exclude(id=request.user.id).order_by('first_name')[:20]
+        batch_mates_serializer = UserSerializer(batch_mates, many=True)
+        
+        # Chapters - Get all unique chapters and count of users in each
+        from django.db.models import Count
+        chapters = User.objects.exclude(chapter='').values('chapter').annotate(
+            member_count=Count('id')
+        ).order_by('-member_count')
+        
         return Response({
             'upcoming_events': events_serializer.data,
-            # 'latest_jobs': jobs_serializer.data,
             'latest_album_images': album_images_serializer.data,
             'latest_members': members_serializer.data,
             'upcoming_birthdays': upcoming_birthdays,
+            'batch_mates': batch_mates_serializer.data,
+            'chapters': chapters
         }, status=status.HTTP_200_OK)
 
 
