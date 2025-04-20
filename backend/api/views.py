@@ -924,3 +924,15 @@ class ImportMembersAPIView(APIView):
             "skipped": skipped,
             "message": f"{len(created)} users created, {len(updated)} updated, {len(skipped)} skipped."
         }, status=status.HTTP_201_CREATED)
+        
+        
+class BirthdayListView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    def get(self, request):
+        today = timezone.now().date()
+        upcoming_birthdays = User.objects.filter(
+            date_of_birth__month=today.month,
+            date_of_birth__day__gte=today.day
+        ).order_by('date_of_birth')
+        serializer = UserSerializer(upcoming_birthdays, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
