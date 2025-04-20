@@ -3,6 +3,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
 from .models import ChatRoom, Message
+from .serializers import ChatRoomSerializer  # new import
 
 User = get_user_model()
 
@@ -12,15 +13,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if not self.user.is_authenticated:
             await self.close()
             return
-        # Accept "room_id" as a URL kwarg; if not provided, use a default group.
         self.room_id = self.scope.get("url_route", {}).get("kwargs", {}).get("room_id")
-        self.room_group_name = f"chat_{self.room_id}" if self.room_id else "all_chat"
-        # If a room_id is provided, verify that the chat room exists and the user is a member.
+        # Use a default group if no room_id is provided
         if self.room_id:
             room = await self.get_chat_room(self.room_id)
             if not room:
-                await self.close()
-                return
+                self.room_group_name = "all_chat"
+            else:
+                self.room_group_name = f"chat_{self.room_id}"
+        else:
+            self.room_group_name = "all_chat"
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
 
@@ -39,7 +41,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 self.room_id = room.id
                 self.room_group_name = f"chat_{self.room_id}"
                 await self.channel_layer.group_add(self.room_group_name, self.channel_name)
-                await self.send(json.dumps({"action": "room_created", "room_id": room.id}))
+                await self.send(json.dumps({"action": "room_created", "room_id": str(room.id)}))
             else:
                 await self.send(json.dumps({"error": "Target user not found."}))
         elif action == "send_message":
@@ -53,9 +55,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
                         "type": "chat_message",
                         "message": message_text,
                         "sender": self.user.username,
-                        "message_id": message.id,
+                        "message_id": str(message.id),
                     },
                 )
+        elif action == "list_rooms":  # new action to list chat rooms
+            rooms_data = await self.get_chat_rooms_sync()
+            await self.send(json.dumps({"action": "list_rooms", "rooms": rooms_data}))
 
     async def chat_message(self, event):
         await self.send(text_data=json.dumps(event))
@@ -83,6 +88,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def create_message(self, user, room_id, message_text):
         chat_room = ChatRoom.objects.get(id=room_id, users=user)
-        # Assumes Message model has a field "content" for the message text.
         message = Message.objects.create(chat_room=chat_room, sender=user, content=message_text)
         return message
+
+    @database_sync_to_async
+    def get_chat_rooms_sync(self):
+        # Serialize all chat rooms for the connected user.
+        rooms = ChatRoom.objects.filter(users=self.user)
+        serializer = ChatRoomSerializer(rooms, many=True, context={"request": None})
+        return serializer.data
