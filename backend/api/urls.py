@@ -36,6 +36,11 @@ urlpatterns = [
     path('user-location/<int:id>/', UserLocationRetrieveUpdateDestroyAPIView.as_view(), name='user_location_detail'),
     path('user-location/search/', UserLocationsearchAPIView.as_view(), name='user_location_search'),
     path('members/import/', ImportMembersAPIView.as_view(), name='import_members'),
+    path('businesses/', BusinessDirectoryListCreateView.as_view(), name='business-list-create'),
+    path('businesses/<int:pk>/', BusinessDirectoryDetailView.as_view(), name='business-detail'),
+    path('businesses/<int:business_id>/images/', BusinessImagesView.as_view(), name='business-images'),
+    path('businesses/categories/', BusinessCategoriesView.as_view(), name='business-categories'),
+    path('businesses/search/', BusinessSearchView.as_view(), name='business-search'),
 ]
 
 if settings.DEBUG:

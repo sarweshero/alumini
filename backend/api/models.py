@@ -79,6 +79,7 @@ class CustomUser(AbstractUser):
     current_work = models.CharField(max_length=255, blank=True)
     Worked_in = models.JSONField(default=list, blank=True)
     experience = models.JSONField(default=list, blank=True)
+    is_entrepreneur = models.BooleanField(default=False)
 
     # Django auth fields
     groups = models.ManyToManyField(
@@ -192,6 +193,7 @@ class PendingSignup(models.Model):
         return f"PendingSignup: {self.email}"
 
 
+
 class LoginLog(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     user_agent = models.CharField(max_length=255, null=True)
@@ -296,4 +298,41 @@ class AlbumImage(models.Model):
     description = models.CharField(max_length=255, blank=True)
     def __str__(self):
         return f"Image for album: {self.album.title}"
+
+class BusinessDirectory(models.Model):
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='businesses')
+    business_name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    category = models.CharField(max_length=100, blank=True)
+    website = models.URLField(blank=True)
+    email = models.EmailField(blank=True)
+    phone = models.CharField(max_length=20, blank=True)
+    address = models.TextField(blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    state = models.CharField(max_length=100, blank=True)
+    country = models.CharField(max_length=100, blank=True)
+    postal_code = models.CharField(max_length=20, blank=True)
+    year_founded = models.IntegerField(null=True, blank=True)
+    employee_count = models.IntegerField(null=True, blank=True)
+    logo = models.FileField(upload_to='business_logos/', null=True, blank=True)
+    social_media = models.JSONField(default=dict, blank=True)
+    keywords = models.JSONField(default=list, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.business_name} owned by {self.owner.username}"
     
+    class Meta:
+        verbose_name = 'Business'
+        verbose_name_plural = 'Business Directory'
+        ordering = ['-created_at']
+
+class BusinessImage(models.Model):
+    business = models.ForeignKey(BusinessDirectory, on_delete=models.CASCADE, related_name='images')
+    image = models.FileField(upload_to='business_images/')
+    caption = models.CharField(max_length=255, blank=True)
+    
+    def __str__(self):
+        return f"Image for {self.business.business_name}"

@@ -1,32 +1,32 @@
-from django.contrib.auth import get_user_model, authenticate
+import os
+import csv
+import json
+import random
+from django.db import models
+from django.db.models import Q
+from datetime import timedelta
 from django.http import Http404
-from django.core.mail import send_mail
 from django.conf import settings
-from rest_framework.views import APIView
-from rest_framework import status, permissions, generics
-from rest_framework.response import Response
-from rest_framework.parsers import MultiPartParser, FormParser
 from django.utils import timezone
 from django.shortcuts import render
-from datetime import timedelta
-import random
+from django.core.mail import send_mail
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from django.utils.encoding import force_bytes
 from rest_framework.authtoken.models import Token
+from rest_framework import status, permissions, generics
+from django.contrib.auth import get_user_model, authenticate
+from rest_framework.parsers import MultiPartParser, FormParser
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from django.utils.encoding import force_bytes, force_str
-import csv
-import os
-from django.db import models
-from django.template.loader import render_to_string
-
 from .models import (
     Events, EventImage, LoginLog, SignupOTP, PendingSignup, Jobs, JobImage, JobComment,
-    JobReaction, Album, AlbumImage, user_location
+    JobReaction, Album, AlbumImage, user_location, BusinessDirectory, BusinessImage
 )
 from .serializers import (
     EventSerializer, LoginLogSerializer, PendingSignupSerializer, UserSerializer,
     JobsSerializer, JobImageSerializer, JobCommentSerializer, AlbumSerializer,
-    AlbumImageSerializer, UserLocationSerializer
+    AlbumImageSerializer, UserLocationSerializer, BusinessDirectorySerializer, BusinessImageSerializer
 )
 
 User = get_user_model()
@@ -936,3 +936,221 @@ class BirthdayListView(APIView):
         ).order_by('date_of_birth')
         serializer = UserSerializer(upcoming_birthdays, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+
+# ----- Business Directory Endpoints -----
+
+
+class BusinessDirectoryListCreateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser)
+    
+    def get(self, request):
+        """List all businesses"""
+        businesses = BusinessDirectory.objects.filter(is_active=True).order_by('-created_at')
+        serializer = BusinessDirectorySerializer(businesses, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def post(self, request):
+        """Create a new business"""
+        business_data = request.data.dict() if hasattr(request.data, 'dict') else request.data
+        
+        # Handle logo if provided
+        logo = request.FILES.get('logo')
+        if logo:
+            business_data['logo'] = logo
+            
+        # Optional: Convert JSON string fields to Python objects
+        for json_field in ['social_media', 'keywords']:
+            if json_field in business_data and isinstance(business_data[json_field], str):
+                try:
+                    business_data[json_field] = json.loads(business_data[json_field])
+                except json.JSONDecodeError:
+                    return Response(
+                        {"error": f"Invalid JSON format for {json_field}"}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+        
+        serializer = BusinessDirectorySerializer(data=business_data)
+        if serializer.is_valid():
+            business = serializer.save(owner=request.user)
+            
+            # Handle multiple images if provided
+            images = request.FILES.getlist('images')
+            for img in images:
+                BusinessImage.objects.create(
+                    business=business, 
+                    image=img, 
+                    caption=request.data.get('caption', '')
+                )
+            
+            # Re-serialize with images included
+            updated_serializer = BusinessDirectorySerializer(business)
+            return Response(updated_serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class BusinessDirectoryDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser)
+    
+    def get_object(self, pk):
+        try:
+            return BusinessDirectory.objects.get(pk=pk)
+        except BusinessDirectory.DoesNotExist:
+            raise Http404
+    
+    def get(self, request, pk):
+        """Retrieve a specific business"""
+        business = self.get_object(pk)
+        serializer = BusinessDirectorySerializer(business)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def put(self, request, pk):
+        """Update a business"""
+        business = self.get_object(pk)
+        
+        # Only allow the owner or staff/admin to update
+        if business.owner != request.user and request.user.role not in ["Staff", "Admin"]:
+            return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+        
+        business_data = request.data.dict() if hasattr(request.data, 'dict') else request.data
+        
+        # Handle logo if provided
+        if 'logo' in request.FILES:
+            business_data['logo'] = request.FILES.get('logo')
+            
+        # Process JSON fields
+        for json_field in ['social_media', 'keywords']:
+            if json_field in business_data and isinstance(business_data[json_field], str):
+                try:
+                    business_data[json_field] = json.loads(business_data[json_field])
+                except json.JSONDecodeError:
+                    return Response(
+                        {"error": f"Invalid JSON format for {json_field}"}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+        
+        serializer = BusinessDirectorySerializer(business, data=business_data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def delete(self, request, pk):
+        """Delete a business"""
+        business = self.get_object(pk)
+        
+        # Only allow the owner or staff/admin to delete
+        if business.owner != request.user and request.user.role not in ["Staff", "Admin"]:
+            return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+        
+        business.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class BusinessImagesView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser)
+    
+    def get_object(self, pk):
+        try:
+            return BusinessImage.objects.get(pk=pk)
+        except BusinessImage.DoesNotExist:
+            raise Http404
+    
+    def get(self, request, business_id):
+        """List images for a business"""
+        images = BusinessImage.objects.filter(business_id=business_id)
+        serializer = BusinessImageSerializer(images, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def post(self, request, business_id):
+        """Add images to a business"""
+        try:
+            business = BusinessDirectory.objects.get(id=business_id)
+        except BusinessDirectory.DoesNotExist:
+            return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check permissions
+        if business.owner != request.user and request.user.role not in ["Staff", "Admin"]:
+            return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+        
+        images = request.FILES.getlist('images')
+        if not images:
+            return Response({"error": "No images provided"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        created_images = []
+        for img in images:
+            caption = request.data.get('caption', '')
+            image = BusinessImage.objects.create(business=business, image=img, caption=caption)
+            serializer = BusinessImageSerializer(image)
+            created_images.append(serializer.data)
+        
+        return Response(created_images, status=status.HTTP_201_CREATED)
+    
+    def delete(self, request, business_id):
+        """Delete an image"""
+        # In this case business_id parameter is actually the image ID
+        image = self.get_object(business_id)
+        business = image.business
+        
+        # Check permissions
+        if business.owner != request.user and request.user.role not in ["Staff", "Admin"]:
+            return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+        
+        image.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class BusinessCategoriesView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        """Get all unique business categories with counts"""
+        from django.db.models import Count
+        categories = BusinessDirectory.objects.exclude(category='') \
+                                           .values('category') \
+                                           .annotate(count=Count('id')) \
+                                           .order_by('-count')
+        return Response(categories, status=status.HTTP_200_OK)
+
+
+class BusinessSearchView(generics.ListAPIView):
+    serializer_class = BusinessDirectorySerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """Search businesses by various parameters"""
+        queryset = BusinessDirectory.objects.filter(is_active=True)
+        
+        # Get search parameters
+        query = self.request.query_params.get('q', '')
+        category = self.request.query_params.get('category', '')
+        city = self.request.query_params.get('city', '')
+        state = self.request.query_params.get('state', '')
+        
+        # Filter by text search
+        if query:
+            queryset = queryset.filter(
+                Q(business_name__icontains=query) |
+                Q(description__icontains=query) |
+                Q(keywords__contains=query)
+            )
+        
+        # Filter by category
+        if category:
+            queryset = queryset.filter(category__iexact=category)
+            
+        # Filter by location
+        if city:
+            queryset = queryset.filter(city__icontains=city)
+        if state:
+            queryset = queryset.filter(state__icontains=state)
+            
+        # Add entrepreneur filter (users with is_entrepreneur flag)
+        entrepreneur = self.request.query_params.get('entrepreneur', '')
+        if entrepreneur.lower() == 'true':
+            queryset = queryset.filter(owner__is_entrepreneur=True)
+            
+        return queryset.order_by('-created_at')

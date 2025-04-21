@@ -166,3 +166,32 @@ class UserLocationSerializer(serializers.ModelSerializer):
             except models.user_location.DoesNotExist:
                 return models.user_location.objects.create(user=user, **validated_data)
         return super().create(validated_data)
+
+class BusinessImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.BusinessImage
+        fields = ['id', 'image', 'caption']
+
+class BusinessDirectorySerializer(serializers.ModelSerializer):
+    owner_details = serializers.SerializerMethodField()
+    images = BusinessImageSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = models.BusinessDirectory
+        fields = [
+            'id', 'owner', 'owner_details', 'business_name', 'description', 
+            'category', 'website', 'email', 'phone', 'address', 'city', 
+            'state', 'country', 'postal_code', 'year_founded', 
+            'employee_count', 'logo', 'social_media', 'keywords', 
+            'is_active', 'created_at', 'updated_at', 'images'
+        ]
+        read_only_fields = ['id', 'owner', 'owner_details', 'created_at', 'updated_at']
+    
+    def get_owner_details(self, obj):
+        return {
+            "id": obj.owner.id,
+            "username": obj.owner.username,
+            "first_name": obj.owner.first_name,
+            "last_name": obj.owner.last_name,
+            "profile_photo": obj.owner.profile_photo.url if obj.owner.profile_photo else None,
+        }
