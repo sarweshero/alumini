@@ -195,3 +195,29 @@ class BusinessDirectorySerializer(serializers.ModelSerializer):
             "last_name": obj.owner.last_name,
             "profile_photo": obj.owner.profile_photo.url if obj.owner.profile_photo else None,
         }
+    
+class NewsImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.NewsImage
+        fields = ['id', 'image', 'caption']
+
+class NewsRoomSerializer(serializers.ModelSerializer):
+    user = serializers.SerializerMethodField()
+    images = NewsImageSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = models.NewsRoom
+        fields = [
+            'id', 'user', 'title', 'content', 'published_on', 'updated_on',
+            'thumbnail', 'category', 'status', 'featured', 'views', 'images'
+        ]
+        read_only_fields = ['id', 'user', 'published_on', 'updated_on', 'views']
+    
+    def get_user(self, obj):
+        return {
+            "id": obj.user.id,
+            "username": obj.user.username,
+            "first_name": obj.user.first_name,
+            "last_name": obj.user.last_name,
+            "profile_photo": obj.user.profile_photo.url if obj.user.profile_photo else None,
+        }

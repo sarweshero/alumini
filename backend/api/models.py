@@ -336,3 +336,35 @@ class BusinessImage(models.Model):
     
     def __str__(self):
         return f"Image for {self.business.business_name}"
+
+class NewsRoom(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='news_articles')
+    title = models.CharField(max_length=255)
+    content = models.TextField()
+    published_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+    thumbnail = models.FileField(upload_to='news_thumbnails/', null=True, blank=True)
+    category = models.CharField(max_length=100, blank=True)
+    status = models.CharField(max_length=20, choices=[
+        ('draft', 'Draft'),
+        ('published', 'Published'),
+        ('archived', 'Archived')
+    ], default='published')
+    featured = models.BooleanField(default=False)
+    views = models.PositiveIntegerField(default=0)
+    
+    class Meta:
+        ordering = ['-published_on']
+        verbose_name = 'News Article'
+        verbose_name_plural = 'News Room'
+    
+    def __str__(self):
+        return self.title
+
+class NewsImage(models.Model):
+    news_article = models.ForeignKey(NewsRoom, on_delete=models.CASCADE, related_name='images')
+    image = models.FileField(upload_to='news_images/')
+    caption = models.CharField(max_length=255, blank=True)
+    
+    def __str__(self):
+        return f"Image for {self.news_article.title}"
