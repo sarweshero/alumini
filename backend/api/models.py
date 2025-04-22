@@ -351,7 +351,6 @@ class NewsRoom(models.Model):
         ('archived', 'Archived')
     ], default='published')
     featured = models.BooleanField(default=False)
-    views = models.PositiveIntegerField(default=0)
     
     class Meta:
         ordering = ['-published_on']

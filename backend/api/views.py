@@ -577,7 +577,7 @@ class UserProfileView(APIView):
 
 class BirthdayListView(APIView):
     """View for listing all user birthdays ordered by nearest upcoming birthday."""
-    # permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
     
     def get(self, request):
         """Get all users with birthdays, ordered by next upcoming birthday."""
@@ -1711,9 +1711,9 @@ class BusinessSearchView(generics.ListAPIView):
             
         return queryset.order_by('-created_at')
 
-        
-# ----- NewsRoom Endpoints -----
-
+#####################################        
+# ----- NewsRoom Endpoints -----    #
+#####################################
 class NewsRoomListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
@@ -1733,8 +1733,7 @@ class NewsRoomListCreateView(APIView):
             queryset = queryset.filter(featured=True)
         
         serializer = NewsRoomSerializer(queryset, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    
+        return Response(serializer.data, status=status.HTTP_200_OK)   
     def post(self, request):
         """Create a new news article"""
         # Only staff or admin can create news
@@ -1742,6 +1741,7 @@ class NewsRoomListCreateView(APIView):
             return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
             
         news_data = request.data.dict() if hasattr(request.data, 'dict') else request.data
+        
         
         # Handle thumbnail if provided
         thumbnail = request.FILES.get('thumbnail')

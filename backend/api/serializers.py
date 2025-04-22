@@ -18,10 +18,8 @@ class UserSerializer(serializers.ModelSerializer):
             'salutation', 'name', 'gender', 'date_of_birth', 'label', 'secondary_email',
             'profile_type', 'roll_no', 'course', 'stream',
             'course_start_year', 'course_end_year', 'faculty_job_title',
-            'faculty_institute', 'faculty_department', 'faculty_start_year', 'faculty_start_month',
-            'faculty_end_year', 'faculty_end_month', 'home_phone_no',
-            'office_phone_no', 'current_location', 'home_town', 'correspondence_address',
-            'correspondence_city', 'correspondence_state', 'correspondence_country',
+            'faculty_institute', 'faculty_department', 'current_location', 'home_town', 'correspondence_address',
+            'correspondence_state', 'correspondence_country',
             'correspondence_pincode', 'company', 'position', 'member_roles', 'educational_course', 'educational_institute',
             'start_year', 'end_year', 'facebook_link', 'linkedin_link', 'twitter_link',
             'website_link', 'work_experience', 'professional_skills', 'industries_worked_in',
@@ -209,7 +207,7 @@ class NewsRoomSerializer(serializers.ModelSerializer):
         model = models.NewsRoom
         fields = [
             'id', 'user', 'title', 'content', 'published_on', 'updated_on',
-            'thumbnail', 'category', 'status', 'featured', 'views', 'images'
+            'thumbnail', 'category', 'featured', 'views', 'images'
         ]
         read_only_fields = ['id', 'user', 'published_on', 'updated_on', 'views']
     
