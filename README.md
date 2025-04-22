@@ -11,7 +11,7 @@ This is a Django Rest Framework (DRF) based backend for a college AlumniPortal. 
 *   **Chats:** Allows users to chat with other users within the portal.
 *   **Maps:** Stores and displays the locations of users on a map.
 *   **NewsRoom:** Provides updates and news from KAHE (Karpagam Academy of Higher Education).
-*   **Eaurnterprenures Section:** Allows entrepreneurs to list their businesses in a business directory.
+*   **Entrepreneur Section:** Allows entrepreneurs to list their businesses in a business directory.
 
 ## Installation
 
