@@ -207,7 +207,7 @@ class NewsRoomSerializer(serializers.ModelSerializer):
         model = models.NewsRoom
         fields = [
             'id', 'user', 'title', 'content', 'published_on', 'updated_on',
-            'thumbnail', 'category', 'featured', 'views', 'images'
+            'thumbnail', 'category', 'featured', 'images'
         ]
         read_only_fields = ['id', 'user', 'published_on', 'updated_on', 'views']
     
