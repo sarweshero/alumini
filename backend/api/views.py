@@ -576,18 +576,57 @@ class UserProfileView(APIView):
 
 
 class BirthdayListView(APIView):
-    """View for listing upcoming birthdays."""
-    permission_classes = [permissions.IsAuthenticated]
+    """View for listing all user birthdays ordered by nearest upcoming birthday."""
+    # permission_classes = [permissions.IsAuthenticated]
     
     def get(self, request):
-        """Get users with upcoming birthdays in the current month."""
+        """Get all users with birthdays, ordered by next upcoming birthday."""
+        # Get current date
         today = timezone.now().date()
-        upcoming_birthdays = User.objects.filter(
-            date_of_birth__month=today.month,
-            date_of_birth__day__gte=today.day
-        ).order_by('date_of_birth')
-        serializer = UserSerializer(upcoming_birthdays, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        current_month = today.month
+        current_day = today.day
+        
+        # Get users with birthdate information
+        users_with_birthdays = User.objects.exclude(date_of_birth__isnull=True)
+        
+        # Calculate days until next birthday for each user
+        upcoming_birthdays = []
+        for user in users_with_birthdays:
+            # Extract month and day from date of birth
+            birth_month = user.date_of_birth.month
+            birth_day = user.date_of_birth.day
+            
+            # Calculate days until next birthday
+            if (birth_month > current_month) or (birth_month == current_month and birth_day >= current_day):
+                # Birthday is later this year
+                next_birthday = timezone.datetime(today.year, birth_month, birth_day).date()
+            else:
+                # Birthday is next year
+                next_birthday = timezone.datetime(today.year + 1, birth_month, birth_day).date()
+                
+            # Calculate days until next birthday
+            days_until_birthday = (next_birthday - today).days
+            
+            # Add user with days until birthday
+            upcoming_birthdays.append({
+                'user': user,
+                'days_until_birthday': days_until_birthday
+            })
+        
+        # Sort by days until birthday (ascending)
+        upcoming_birthdays.sort(key=lambda x: x['days_until_birthday'])
+        
+        # Serialize users in order of upcoming birthdays
+        users_ordered = [item['user'] for item in upcoming_birthdays]
+        serializer = UserSerializer(users_ordered, many=True)
+        
+        # Include days until birthday in the response
+        response_data = []
+        for i, user_data in enumerate(serializer.data):
+            user_data['days_until_birthday'] = upcoming_birthdays[i]['days_until_birthday']
+            response_data.append(user_data)
+            
+        return Response(response_data, status=status.HTTP_200_OK)
 
 
 class LatestMembersView(APIView):
