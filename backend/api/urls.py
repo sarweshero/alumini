@@ -14,6 +14,7 @@ urlpatterns = [
     path('change-password/', ChangePasswordView.as_view(), name='change_password'),
     path('forgot-password/', ForgotPasswordView.as_view(), name='forgot_password'),
     path('reset-password/', ResetPasswordView.as_view(), name='reset_password'),
+    path('change-username/', ChangeUsernameView.as_view(), name='change_username'),
     path('profile/', ProfileView.as_view(), name='profile'),
     path('login-history/', UserLoginHistoryView.as_view(), name='login-history'),
     path('events/<int:pk>', EventDetailView.as_view(), name='events'),
@@ -46,7 +47,6 @@ urlpatterns = [
     path('news/<int:pk>/', NewsRoomDetailView.as_view(), name='news-detail'),
     path('news/<int:news_id>/images/', NewsImagesView.as_view(), name='news-images'),
     path('news/categories/', NewsCategoriesView.as_view(), name='news-categories'),
-
 ]
 
 if settings.DEBUG:

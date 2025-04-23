@@ -72,6 +72,77 @@ class UserLoginHistoryView(APIView):
         serializer = LoginLogSerializer(logs, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+class ChangeUsernameView(APIView):
+    """View for changing a user's username without password verification."""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request):
+        """
+        Change the username of the authenticated user.
+        
+        Required payload:
+            - new_username: The desired new username
+            
+        Returns:
+            Success or error message with appropriate status code
+        """
+        new_username = request.data.get('new_username')
+        
+        # Validate input
+        if not new_username:
+            return Response(
+                {"error": "New username is required"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if username already exists in Users table
+        User = get_user_model()
+        if User.objects.filter(username=new_username).exists():
+            return Response(
+                {"error": "This username is already taken"}, 
+                status=status.HTTP_409_CONFLICT
+            )
+        
+        # Check if username already exists in PendingSignup table
+        if PendingSignup.objects.filter(username=new_username).exists():
+            return Response(
+                {"error": "This username is already in the pending approval queue"}, 
+                status=status.HTTP_409_CONFLICT
+            )
+        
+        # Validate username format
+        import re
+        if not re.match(r'^[\w.@+-]+$', new_username):
+            return Response(
+                {"error": "Username may only contain letters, numbers, and @/./+/-/_ characters"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        if len(new_username) > 150:
+            return Response(
+                {"error": "Username must be 150 characters or fewer"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Update username
+        old_username = request.user.username
+        request.user.username = new_username
+        request.user.save(update_fields=['username'])
+        
+        # Log the change
+        from django.utils import timezone
+        LoginLog.objects.create(
+            user=request.user,
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+            timestamp=timezone.now()
+        )
+        
+        return Response({
+            "success": True,
+            "message": "Username successfully updated",
+            "new_username": new_username
+        }, status=status.HTTP_200_OK)
+    
 
 class AdminLoginView(APIView):
     """View for admin authentication."""
