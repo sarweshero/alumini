@@ -1877,15 +1877,6 @@ class NewsRoomDetailView(APIView):
     def get(self, request, pk):
         """Retrieve a news article and increment view count"""
         news_article = self.get_object(pk)
-        
-        # Increment view count, but only once per session
-        from django.core.cache import cache
-        cache_key = f"news_view_{request.user.id}_{news_article.id}"
-        if not cache.get(cache_key):
-            news_article.views += 1
-            news_article.save(update_fields=["views"])
-            cache.set(cache_key, True, 3600)  # 1 hour cache
-            
         serializer = NewsRoomSerializer(news_article)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
