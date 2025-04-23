@@ -140,6 +140,7 @@ class ChangeUsernameView(APIView):
         return Response({
             "success": True,
             "message": "Username successfully updated",
+            "old_username": old_username,
             "new_username": new_username
         }, status=status.HTTP_200_OK)
     
