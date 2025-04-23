@@ -126,6 +126,7 @@ class JobsSerializer(serializers.ModelSerializer):
         return {
             "first_name": user.first_name,
             "last_name": user.last_name,
+            "username": user.username,
             "profile_photo": user.profile_photo.url if user.profile_photo else ""
         }
 

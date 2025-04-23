@@ -638,15 +638,44 @@ class UserProfileView(APIView):
     parser_classes = (MultiPartParser, FormParser)
     
     def get(self, request, username):
-        """Get a user's profile data by username."""
+        """
+        Get a user's profile data by username.
+        
+        Also includes jobs and events posted by this user.
+        """
+        # Verify authenticated with request
+        if not request.user.is_authenticated:
+            return Response({"error": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
+            
         try:
             user = User.objects.get(username=username)
         except User.DoesNotExist:
             return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-        serializer = UserSerializer(user)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-
+            
+        # Get user's basic profile
+        user_serializer = UserSerializer(user)
+        
+        # Get user's posted jobs
+        jobs = Jobs.objects.filter(user=user).order_by('-posted_on')[:5]
+        jobs_serializer = JobsSerializer(jobs, many=True)
+        
+        # Get user's posted events
+        events = Events.objects.filter(user=user).order_by('-uploaded_on')[:5]
+        events_serializer = EventSerializer(events, many=True)
+        
+        # Get user's businesses
+        businesses = BusinessDirectory.objects.filter(owner=user, is_active=True)[:5]
+        businesses_serializer = BusinessDirectorySerializer(businesses, many=True)
+        
+        # Combine all data
+        response_data = user_serializer.data
+        response_data['posts'] = {
+            'jobs': jobs_serializer.data,
+            'events': events_serializer.data,
+            'businesses': businesses_serializer.data
+        }
+        
+        return Response(response_data, status=status.HTTP_200_OK)
 class BirthdayListView(APIView):
     """View for listing all user birthdays ordered by nearest upcoming birthday."""
     permission_classes = [permissions.IsAuthenticated]
