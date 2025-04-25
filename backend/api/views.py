@@ -2006,7 +2006,7 @@ class UserBulkImportView(APIView):
                 df = pd.read_csv(file_obj)
             
             # Check if file has the expected columns from exmembers.csv
-            expected_columns = ['salutation', 'first_name', 'date_of_birth', 'email']
+            expected_columns = ['first_name', 'date_of_birth', 'email']
             missing_columns = [col for col in expected_columns if col not in df.columns]
             if missing_columns:
                 return Response(
