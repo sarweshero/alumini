@@ -1985,6 +1985,7 @@ class UserBulkImportView(APIView):
     parser_classes = (MultiPartParser, FormParser)
     
     def post(self, request, *args, **kwargs):
+        User = get_user_model()
         file_obj = request.FILES.get('file')
         if not file_obj:
             return Response({"error": "No file provided."}, status=status.HTTP_400_BAD_REQUEST)
@@ -2004,9 +2005,9 @@ class UserBulkImportView(APIView):
             else:
                 df = pd.read_csv(file_obj)
             
-            # Required columns check
-            required_columns = ['username', 'email', 'date_of_birth']  # adjust as needed
-            missing_columns = [col for col in required_columns if col not in df.columns]
+            # Check if file has the expected columns from exmembers.csv
+            expected_columns = ['salutation', 'first_name', 'date_of_birth', 'email']
+            missing_columns = [col for col in expected_columns if col not in df.columns]
             if missing_columns:
                 return Response(
                     {"error": f"Missing required columns: {', '.join(missing_columns)}"},
@@ -2019,41 +2020,81 @@ class UserBulkImportView(APIView):
             # Process each row
             for idx, row in df.iterrows():
                 try:
-                    username = row['username']
-                    email = row['email']
-                    dob = row['date_of_birth']
+                    # Extract core data
+                    email = str(row['email']).strip().lower() if not pd.isna(row['email']) else None
+                    if not email or '@' not in email:
+                        error_details.append(f"Row {idx+1}: Invalid or missing email")
+                        continue
                     
-                    # Convert DOB to password format (YYYYMMDD)
-                    if isinstance(dob, str):
-                        dob_date = datetime.strptime(dob, "%Y-%m-%d")  # adjust format as needed
+                    first_name = str(row['first_name']).strip() if not pd.isna(row['first_name']) else ""
+                    salutation = str(row['salutation']).strip() if not pd.isna(row['salutation']) else ""
+                    
+                    # Process date and create password
+                    dob = row['date_of_birth'] if not pd.isna(row['date_of_birth']) else None
+                    if dob:
+                        try:
+                            # Handle date format DD-MM-YY
+                            dob_date = datetime.strptime(str(dob), "%d-%m-%y")
+                            password = dob_date.strftime("%Y%m%d")
+                            dob_formatted = dob_date.strftime("%Y-%m-%d")
+                        except:
+                            try:
+                                # Try alternative format in case it's different
+                                dob_date = pd.to_datetime(dob)
+                                password = dob_date.strftime("%Y%m%d")
+                                dob_formatted = dob_date.strftime("%Y-%m-%d")
+                            except:
+                                error_details.append(f"Row {idx+1}: Invalid date format: {dob}")
+                                continue
                     else:
-                        dob_date = dob
-                        
-                    password = dob_date.strftime("%Y%m%d")
+                        # Default password if no date of birth
+                        password = "defaultpassword123"
+                        dob_formatted = None
+                    
+                    # Create username (use email prefix)
+                    username = email.split('@')[0]
                     
                     # Check if user already exists
                     if User.objects.filter(username=username).exists():
-                        error_details.append(f"Row {idx+1}: Username '{username}' already exists")
-                        continue
-                        
+                        username = f"{username}_{idx}"
+                    
                     if User.objects.filter(email=email).exists():
                         error_details.append(f"Row {idx+1}: Email '{email}' already exists")
                         continue
                     
-                    # Create user - adjust fields as per your User model
+                    # Map other fields from CSV to User model
+                    user_data = {
+                        'username': username,
+                        'email': email,
+                        'first_name': first_name,
+                        'date_of_birth': dob_formatted,
+                        'salutation': salutation,
+                        'gender': row.get('gender', ''),
+                        'phone': str(row['phone']) if not pd.isna(row.get('phone')) else '',
+                        'current_location': row.get('Current Location', ''),
+                        'Address': row.get('Address', ''),
+                        'city': row.get('city', ''),
+                        'state': row.get('state', ''),
+                        'country': row.get('country', ''),
+                        'pincode': row.get('pincode', ''),
+                        'chapter': row.get('chapter', ''),
+                        'college_name': row.get('college_name', ''),
+                        'course': row.get('course', ''),
+                        'passed_out_year': row.get('passed_out_year') if not pd.isna(row.get('passed_out_year')) else None,
+                        'experience': float(row.get('experience')) if not pd.isna(row.get('experience')) else 0,
+                    }
+                    
+                    # Process industries worked in
+                    worked_in = row.get('Worked_In', '')
+                    if worked_in and not pd.isna(worked_in):
+                        user_data['Worked_in'] = [industry.strip() for industry in str(worked_in).split(',')]
+                    
+                    # Create user
                     user = User.objects.create_user(
-                        username=username,
-                        email=email,
+                        **user_data,
                         password=password,
-                        # Add other fields as necessary
                     )
                     
-                    # Set additional fields from Excel if available
-                    for field in df.columns:
-                        if field not in ['username', 'email', 'date_of_birth'] and hasattr(user, field):
-                            setattr(user, field, row[field])
-                    
-                    user.save()
                     success_count += 1
                     
                 except Exception as e:
