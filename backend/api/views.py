@@ -1981,7 +1981,7 @@ class UserBulkImportView(APIView):
     """
     POST: Import users from Excel/CSV file and set their password to their date of birth.
     """
-    permission_classes = [IsAdminUser]  # Only admin can perform this action
+    permission_classes = [permissions.IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
     
     def post(self, request, *args, **kwargs):
