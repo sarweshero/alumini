@@ -735,7 +735,7 @@ class LatestMembersView(APIView):
 
     def get(self, request):
         """Get the 2000 most recent student members."""
-        latest_members = User.objects.filter(role__in=['Admin', 'Staff']).order_by('-id')[:2000]
+        latest_members = User.objects.filter(~Q(role__in=['Admin', 'Staff'])).order_by('passed_out_year')
         serializer = UserSerializer(latest_members, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -1321,7 +1321,7 @@ class HomePageDataView(APIView):
         album_images_serializer = AlbumSerializer(latest_album_images, many=True)
         
         # Latest Members
-        latest_members = User.objects.filter(~Q(role__in=['Admin', 'Staff'])).order_by('-id')[:60]
+        latest_members = User.objects.filter(~Q(role__in=['Admin', 'Staff'])).order_by('passed_out_year')
         members_serializer = UserSerializer(latest_members, many=True)
         
         # Batch Mates - Get users from same passed_out_year as current user
