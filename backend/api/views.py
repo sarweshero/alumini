@@ -17,28 +17,27 @@ import os
 import csv
 import json
 import random
-from datetime import timedelta
-from typing import Dict, List, Union, Optional, Any
-
+import pandas as pd
 from django.db import models
-from django.db.models import Q, Count
+from datetime import datetime
+from datetime import timedelta
 from django.http import Http404
 from django.conf import settings
 from django.utils import timezone
 from django.shortcuts import render
-from django.core.mail import send_mail
 from django.core.cache import cache
-from django.contrib.auth import get_user_model, authenticate
-from django.utils.encoding import force_bytes
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from django.contrib.auth.tokens import default_token_generator
-
-from rest_framework import status, permissions, generics
+from django.db.models import Q, Count
+from django.core.mail import send_mail
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from django.utils.encoding import force_bytes
 from rest_framework.authtoken.models import Token
+from rest_framework.permissions import IsAdminUser
+from rest_framework import status, permissions, generics
+from django.contrib.auth import get_user_model, authenticate
 from rest_framework.parsers import MultiPartParser, FormParser
-
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.contrib.auth.tokens import default_token_generator
 from .models import (
     # User-related models
     LoginLog, SignupOTP, PendingSignup, user_location,
@@ -1975,3 +1974,105 @@ class NewsCategoriesView(APIView):
                                     .annotate(count=Count('id')) \
                                     .order_by('-count')
         return Response(categories, status=status.HTTP_200_OK)
+    
+
+
+class UserBulkImportView(APIView):
+    """
+    POST: Import users from Excel/CSV file and set their password to their date of birth.
+    """
+    permission_classes = [IsAdminUser]  # Only admin can perform this action
+    parser_classes = (MultiPartParser, FormParser)
+    
+    def post(self, request, *args, **kwargs):
+        file_obj = request.FILES.get('file')
+        if not file_obj:
+            return Response({"error": "No file provided."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check file extension
+        file_extension = file_obj.name.split('.')[-1].lower()
+        if file_extension not in ['xlsx', 'xls', 'csv']:
+            return Response(
+                {"error": "Invalid file format. Only Excel and CSV files are accepted."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Read the file
+            if file_extension in ['xlsx', 'xls']:
+                df = pd.read_excel(file_obj)
+            else:
+                df = pd.read_csv(file_obj)
+            
+            # Required columns check
+            required_columns = ['username', 'email', 'date_of_birth']  # adjust as needed
+            missing_columns = [col for col in required_columns if col not in df.columns]
+            if missing_columns:
+                return Response(
+                    {"error": f"Missing required columns: {', '.join(missing_columns)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            success_count = 0
+            error_details = []
+            
+            # Process each row
+            for idx, row in df.iterrows():
+                try:
+                    username = row['username']
+                    email = row['email']
+                    dob = row['date_of_birth']
+                    
+                    # Convert DOB to password format (YYYYMMDD)
+                    if isinstance(dob, str):
+                        dob_date = datetime.strptime(dob, "%Y-%m-%d")  # adjust format as needed
+                    else:
+                        dob_date = dob
+                        
+                    password = dob_date.strftime("%Y%m%d")
+                    
+                    # Check if user already exists
+                    if User.objects.filter(username=username).exists():
+                        error_details.append(f"Row {idx+1}: Username '{username}' already exists")
+                        continue
+                        
+                    if User.objects.filter(email=email).exists():
+                        error_details.append(f"Row {idx+1}: Email '{email}' already exists")
+                        continue
+                    
+                    # Create user - adjust fields as per your User model
+                    user = User.objects.create_user(
+                        username=username,
+                        email=email,
+                        password=password,
+                        # Add other fields as necessary
+                    )
+                    
+                    # Set additional fields from Excel if available
+                    for field in df.columns:
+                        if field not in ['username', 'email', 'date_of_birth'] and hasattr(user, field):
+                            setattr(user, field, row[field])
+                    
+                    user.save()
+                    success_count += 1
+                    
+                except Exception as e:
+                    error_details.append(f"Row {idx+1}: {str(e)}")
+            
+            # Prepare response
+            response_data = {
+                "success_count": success_count,
+                "total_rows": len(df),
+                "errors": error_details
+            }
+            
+            if success_count > 0:
+                return Response(response_data, status=status.HTTP_201_CREATED)
+            else:
+                return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to process file: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
