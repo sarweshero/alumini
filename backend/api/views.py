@@ -2076,7 +2076,7 @@ class UserBulkImportView(APIView):
                         'city': row.get('city', ''),
                         'state': row.get('state', ''),
                         'country': row.get('country', ''),
-                        'pincode': row.get('pincode', ''),
+                        'zip_code': row.get('pincode', ''),
                         'chapter': row.get('chapter', ''),
                         'college_name': row.get('college_name', ''),
                         'course': row.get('course', ''),
