@@ -105,7 +105,7 @@ class MessageDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         chat_room = get_object_or_404(ChatRoom, id=room_id, users=self.request.user)
         return Message.objects.filter(chat_room=chat_room)
     
-    def put(self, request, *args, **kwargs):
+    def put(self, request, *_args, **_kwargs):
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=False)
         if serializer.is_valid():
@@ -113,7 +113,7 @@ class MessageDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-    def delete(self, request, *args, **kwargs):
+    def delete(self, request, *_args, **_kwargs):
         instance = self.get_object()
         self.perform_destroy(instance)
         return Response({"detail": "Message deleted successfully."}, status=status.HTTP_200_OK)
