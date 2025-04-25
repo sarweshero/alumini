@@ -47,6 +47,8 @@ urlpatterns = [
     path('news/<int:pk>/', NewsRoomDetailView.as_view(), name='news-detail'),
     path('news/<int:news_id>/images/', NewsImagesView.as_view(), name='news-images'),
     path('news/categories/', NewsCategoriesView.as_view(), name='news-categories'),
+    path('users/bulk-import/', UserBulkImportView.as_view(), name='user-bulk-import'),
+
 ]
 
 if settings.DEBUG:
