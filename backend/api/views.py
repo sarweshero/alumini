@@ -1321,7 +1321,7 @@ class HomePageDataView(APIView):
         album_images_serializer = AlbumSerializer(latest_album_images, many=True)
         
         # Latest Members
-        latest_members = User.objects.filter(~Q(role__in=['Admin', 'Staff'])).order_by('passed_out_year')[:30000]
+        latest_members = User.objects.filter(~Q(role__in=['Admin', 'Staff'])).order_by('passed_out_year')[:100]
         members_serializer = UserSerializer(latest_members, many=True)
         
         # Batch Mates - Get users from same passed_out_year as current user
