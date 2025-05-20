@@ -717,7 +717,7 @@ class BirthdayListView(APIView):
         
         # Sort and limit to 1000
         upcoming_birthdays.sort(key=lambda x: x['days_until_birthday'])
-        upcoming_birthdays = upcoming_birthdays[:5000]
+        upcoming_birthdays = upcoming_birthdays[:2500]
         
         users_ordered = [item['user'] for item in upcoming_birthdays]
         serializer = UserSerializer(users_ordered, many=True)
