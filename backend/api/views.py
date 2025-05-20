@@ -691,12 +691,23 @@ class BirthdayListView(APIView):
         for user in users_with_birthdays:
             birth_month = user.date_of_birth.month
             birth_day = user.date_of_birth.day
-            
-            if (birth_month > current_month) or (birth_month == current_month and birth_day >= current_day):
-                next_birthday = timezone.datetime(today.year, birth_month, birth_day).date()
-            else:
-                next_birthday = timezone.datetime(today.year + 1, birth_month, birth_day).date()
-                
+
+            # Calculate next birthday, handle leap year issue
+            try:
+                if (birth_month > current_month) or (birth_month == current_month and birth_day >= current_day):
+                    next_birthday = timezone.datetime(today.year, birth_month, birth_day).date()
+                else:
+                    next_birthday = timezone.datetime(today.year + 1, birth_month, birth_day).date()
+            except ValueError:
+                # Handle Feb 29 on non-leap years by using Feb 28
+                if birth_month == 2 and birth_day == 29:
+                    if (birth_month > current_month) or (birth_month == current_month and birth_day >= current_day):
+                        next_birthday = timezone.datetime(today.year, 2, 28).date()
+                    else:
+                        next_birthday = timezone.datetime(today.year + 1, 2, 28).date()
+                else:
+                    continue  # skip invalid dates
+
             days_until_birthday = (next_birthday - today).days
             
             upcoming_birthdays.append({
@@ -717,7 +728,6 @@ class BirthdayListView(APIView):
             response_data.append(user_data)
             
         return Response(response_data, status=status.HTTP_200_OK)
-
 
 class LatestMembersView(APIView):
     """View for listing recent members."""
