@@ -120,10 +120,10 @@ DATABASES = {
 # DATABASES = {
 #     'default': {
 #         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'Alumni',
-#         'USER': 'Alumni',
-#         'PASSWORD': 'Sarwesh',
-#         'HOST': 'localhost',
+#         'NAME': 'ALUM',
+#         'USER': 'alumni',
+#         'PASSWORD': 'Kahe@Alumni',
+#         'HOST': '134.209.157.195',
 #         'PORT': '5432',
 #     }
 # }
