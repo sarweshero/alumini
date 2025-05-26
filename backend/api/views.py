@@ -537,14 +537,25 @@ class ApproveSignupView(APIView):
         user_data = {}
         for field in [f for f in User._meta.fields if f.name not in ("id", "last_login", "date_joined", "password")]:
             value = getattr(pending, field.name, "")
-            
+
             # Handle None and empty values for date fields
             if value is None:
                 value = ""
             if isinstance(field, (models.DateField, models.DateTimeField)) and value == "":
                 value = None
-                
-            user_data[field.name] = value
+
+            # Ensure boolean fields are True/False, not empty string
+            if isinstance(field, models.BooleanField):
+                if value in [True, False]:
+                    user_data[field.name] = value
+                elif str(value).lower() == "true":
+                    user_data[field.name] = True
+                elif str(value).lower() == "false":
+                    user_data[field.name] = False
+                else:
+                    user_data[field.name] = False  # Default to False if empty or invalid
+            else:
+                user_data[field.name] = value
 
         # Set core user data
         user_data['username'] = pending.username
