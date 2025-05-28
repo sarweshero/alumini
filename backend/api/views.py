@@ -2035,7 +2035,12 @@ class UserBulkImportView(APIView):
     POST: Import users from Excel/CSV file and set their password to their date of birth.
     """
     permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.AllowAny]
     parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request):
+        import pandas as pd
+        from datetime import datetime
 
     def post(self, request):
         import pandas as pd
@@ -2045,6 +2050,7 @@ class UserBulkImportView(APIView):
         if not file_obj:
             return Response({"error": "No file provided."}, status=status.HTTP_400_BAD_REQUEST)
 
+
         file_extension = file_obj.name.split('.')[-1].lower()
         if file_extension not in ['xlsx', 'xls', 'csv']:
             return Response(
@@ -2052,11 +2058,18 @@ class UserBulkImportView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+
         try:
             if file_extension in ['xlsx', 'xls']:
                 df = pd.read_excel(file_obj)
             else:
                 df = pd.read_csv(file_obj)
+
+            expected_columns = [
+                'username', 'email', 'first_name', 'last_name', 'salutation', 'gender', 'date_of_birth',
+                'current_work', 'Roles Played', 'experience', 'chapter', 'college_name', 'phone', 'Address',
+                'city', 'State', 'Country', 'zip_code', 'role', 'Course End Year', 'worked_In'
+            ]
 
             expected_columns = [
                 'username', 'email', 'first_name', 'last_name', 'salutation', 'gender', 'date_of_birth',
@@ -2118,6 +2131,7 @@ class UserBulkImportView(APIView):
                         'username': username,
                         'email': email,
                         'first_name': first_name,
+                        'last_name': last_name,
                         'last_name': last_name,
                         'salutation': salutation,
                         'gender': gender,
