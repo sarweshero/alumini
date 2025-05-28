@@ -789,7 +789,7 @@ class AlumniAdminFilterView(ListAPIView):
     def get_queryset(self):
         queryset = super().get_queryset()
         # Optionally exclude admin/staff if not needed
-        # queryset = queryset.exclude(role__in=['Admin', 'Staff'])
+        queryset = queryset.exclude(role__in=['Admin', 'Staff'])
         return queryset
 
 

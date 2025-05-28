@@ -21,6 +21,7 @@ urlpatterns = [
     path('events/', EventView.as_view(), name='events'),
     path('profile/<str:username>', UserProfileView.as_view(), name='profile-views'),
     path('member-profiles/', LatestMembersView.as_view(), name='user-posts'),
+    path('admin-members/', AlumniAdminFilterView.as_view()),
     path('home/', HomePageDataView.as_view(), name='home_page_data'),
     path('birthdays/',BirthdayListView.as_view(), name='Birthdays'),
     path('jobs/', JobListCreateView.as_view(), name='jobs-list-create'),
