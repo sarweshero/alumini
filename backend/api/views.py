@@ -18,6 +18,7 @@ import csv
 import json
 import random
 import pandas as pd
+import django_filters
 from django.db import models
 from datetime import datetime
 from datetime import timedelta
@@ -759,6 +760,27 @@ class AlumniPagination(PageNumberPagination):
     page_size_query_param = 'page_size'
     max_page_size = 1000
     
+class AlumniAdminFilter(django_filters.FilterSet):
+    roles_played = django_filters.CharFilter(method='filter_roles_played')
+    worked_in = django_filters.CharFilter(method='filter_worked_in')
+
+    class Meta:
+        model = User
+        # Only include fields that are not JSONField/ArrayField in filterset_fields
+        fields = [
+            'username', 'email', 'first_name', 'last_name', 'salutation', 'gender',
+            'date_of_birth', 'current_work', 'experience', 'chapter', 'college_name',
+            'phone', 'address', 'city', 'state', 'country', 'zip_code', 'role',
+            'course_end_year', 'is_staff', 'is_active', 'is_superuser'
+        ]
+
+    def filter_roles_played(self, queryset, name, value):
+        # For ArrayField or JSONField, use __contains
+        return queryset.filter(roles_played__icontains=value)
+
+    def filter_worked_in(self, queryset, name, value):
+        return queryset.filter(worked_in__icontains=value)
+
 class AlumniAdminFilterView(ListAPIView):
     """
     Admin view for filtering alumni in all possible ways.
@@ -769,30 +791,19 @@ class AlumniAdminFilterView(ListAPIView):
     permission_classes = [IsAdminUser]
     pagination_class = AlumniPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_class = AlumniAdminFilter
 
-    # Allow filtering by any field in the User model
-    filterset_fields = [
-        'username', 'email', 'first_name', 'last_name', 'salutation', 'gender',
-        'date_of_birth', 'current_work', 'experience', 'chapter', 'college_name',
-        'phone', 'address', 'city', 'state', 'country', 'zip_code', 'role',
-        'course_end_year', 'is_staff', 'is_active', 'is_superuser'
-    ]
-    # Allow search on these fields
     search_fields = [
         'username', 'email', 'first_name', 'last_name', 'current_work',
         'roles_played', 'worked_in', 'college_name', 'phone', 'address', 'city'
     ]
-    # Allow ordering by any field
     ordering_fields = '__all__'
     ordering = ['-id']
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        # Optionally exclude admin/staff if not needed
         queryset = queryset.exclude(role__in=['Admin', 'Staff'])
         return queryset
-
-
 #####################################
 #           EVENT VIEWS             #
 #####################################
