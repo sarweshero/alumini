@@ -766,13 +766,12 @@ class AlumniAdminFilter(django_filters.FilterSet):
 
     class Meta:
         model = User
-        # Only include fields that are NOT JSONField/ArrayField in filterset_fields
         fields = [
             'username', 'email', 'first_name', 'last_name', 'salutation', 'gender',
             'date_of_birth', 'current_work', 'chapter', 'college_name',
-            'phone', 'address', 'city', 'state', 'country', 'zip_code', 'role',
+            'phone',  # REMOVE 'address' if not a model field!
+            'city', 'state', 'country', 'zip_code', 'role',
             'course_end_year', 'is_staff', 'is_active', 'is_superuser'
-            # 'experience' REMOVED because it's a JSONField
         ]
 
     def filter_roles_played(self, queryset, name, value):
@@ -2144,7 +2143,7 @@ class UserBulkImportView(APIView):
                         'first_name': first_name,
                         'last_name': last_name,
                         'last_name': last_name,
-                        'salutation': salutation
+                        'salutation': salutation,
                         'gender': gender,
                         'date_of_birth': dob_formatted,
                         'current_work': str(row['current_work']).strip() if pd.notna(row['current_work']) else "",
