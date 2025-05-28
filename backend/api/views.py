@@ -1992,137 +1992,129 @@ class UserBulkImportView(APIView):
     """
     POST: Import users from Excel/CSV file and set their password to their date of birth.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     parser_classes = (MultiPartParser, FormParser)
-    
-    def post(self, request, *args, **kwargs):
+
+    def post(self, request):
+        import pandas as pd
+        from datetime import datetime
         User = get_user_model()
         file_obj = request.FILES.get('file')
         if not file_obj:
             return Response({"error": "No file provided."}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Check file extension
+
         file_extension = file_obj.name.split('.')[-1].lower()
         if file_extension not in ['xlsx', 'xls', 'csv']:
             return Response(
                 {"error": "Invalid file format. Only Excel and CSV files are accepted."},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         try:
-            # Read the file
             if file_extension in ['xlsx', 'xls']:
                 df = pd.read_excel(file_obj)
             else:
                 df = pd.read_csv(file_obj)
-            
-            # Check if file has the expected columns from exmembers.csv
-            expected_columns = ['first_name', 'date_of_birth', 'email']
+
+            expected_columns = [
+                'username', 'email', 'first_name', 'last_name', 'salutation', 'gender', 'date_of_birth',
+                'current_work', 'Roles Played', 'experience', 'chapter', 'college_name', 'phone', 'Address',
+                'city', 'State', 'Country', 'zip_code', 'role', 'Course End Year', 'worked_In'
+            ]
             missing_columns = [col for col in expected_columns if col not in df.columns]
             if missing_columns:
                 return Response(
                     {"error": f"Missing required columns: {', '.join(missing_columns)}"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            
+
             success_count = 0
             error_details = []
-            
-            # Process each row
+
             for idx, row in df.iterrows():
                 try:
-                    # Extract core data
-                    email = str(row['email']).strip().lower() if not pd.isna(row['email']) else None
+                    email = str(row['email']).strip().lower() if pd.notna(row['email']) else None
                     if not email or '@' not in email:
                         error_details.append(f"Row {idx+1}: Invalid or missing email")
                         continue
-                    
-                    first_name = str(row['first_name']).strip() if not pd.isna(row['first_name']) else ""
-                    salutation = str(row['salutation']).strip() if not pd.isna(row['salutation']) else ""
-                    
-                    # Process date and create password
-                    dob = row['date_of_birth'] if not pd.isna(row['date_of_birth']) else None
-                    if dob:
+
+                    username = str(row['username']).strip() if pd.notna(row['username']) else email.split('@')[0]
+                    first_name = str(row['first_name']).strip() if pd.notna(row['first_name']) else ""
+                    last_name = str(row['last_name']).strip() if pd.notna(row['last_name']) else ""
+                    salutation = str(row['salutation']).strip() if pd.notna(row['salutation']) else ""
+                    gender = str(row['gender']).strip() if pd.notna(row['gender']) else ""
+                    date_of_birth = row['date_of_birth'] if pd.notna(row['date_of_birth']) else None
+
+                    # Parse date_of_birth and set as password
+                    if date_of_birth:
                         try:
-                            # Handle date format DD-MM-YY
-                            dob_date = datetime.strptime(str(dob), "%d-%m-%y")
+                            if isinstance(date_of_birth, str):
+                                try:
+                                    dob_date = datetime.strptime(date_of_birth, "%m/%d/%Y")
+                                except ValueError:
+                                    dob_date = datetime.strptime(date_of_birth, "%m/%d/%y")
+                            else:
+                                dob_date = pd.to_datetime(date_of_birth)
                             password = dob_date.strftime("%Y%m%d")
                             dob_formatted = dob_date.strftime("%Y-%m-%d")
-                        except:
-                            try:
-                                # Try alternative format in case it's different
-                                dob_date = pd.to_datetime(dob)
-                                password = dob_date.strftime("%Y%m%d")
-                                dob_formatted = dob_date.strftime("%Y-%m-%d")
-                            except:
-                                error_details.append(f"Row {idx+1}: Invalid date format: {dob}")
-                                continue
+                        except Exception:
+                            error_details.append(f"Row {idx+1}: Invalid date_of_birth format: {date_of_birth}")
+                            continue
                     else:
-                        # Default password if no date of birth
                         password = "defaultpassword123"
                         dob_formatted = None
-                    
-                    # Create username (use email prefix)
-                    username = email.split('@')[0]
-                    
-                    # Check if user already exists
-                    if User.objects.filter(username=username).exists():
-                        username = f"{username}_{idx}"
-                    
+
                     if User.objects.filter(email=email).exists():
                         error_details.append(f"Row {idx+1}: Email '{email}' already exists")
                         continue
-                    
-                    # Map other fields from CSV to User model
+
+                    role = str(row['role']).strip() if pd.notna(row['role']) else ""
+                    is_staff = True if role.lower() == "staff" else False
+
+                    # Map fields
                     user_data = {
                         'username': username,
                         'email': email,
                         'first_name': first_name,
-                        'date_of_birth': dob_formatted,
+                        'last_name': last_name,
                         'salutation': salutation,
-                        'gender': row.get('gender', ''),
-                        'phone': str(row['phone']) if not pd.isna(row.get('phone')) else '',
-                        'current_location': row.get('Current Location', ''),
-                        'Address': row.get('Address', ''),
-                        'city': row.get('city', ''),
-                        'state': row.get('state', ''),
-                        'country': row.get('country', ''),
-                        'zip_code': row.get('pincode', ''),
-                        'chapter': row.get('chapter', ''),
-                        'college_name': row.get('college_name', ''),
-                        'course': row.get('course', ''),
-                        'passed_out_year': row.get('passed_out_year') if not pd.isna(row.get('passed_out_year')) else None,
-                        'experience': float(row.get('experience')) if not pd.isna(row.get('experience')) else 0,
+                        'gender': gender,
+                        'date_of_birth': dob_formatted,
+                        'current_work': str(row['current_work']).strip() if pd.notna(row['current_work']) else "",
+                        'roles_played': [r.strip() for r in str(row['Roles Played']).split(',')] if pd.notna(row['Roles Played']) and row['Roles Played'] else [],
+                        'experience': float(row['experience']) if pd.notna(row['experience']) else 0,
+                        'chapter': str(row['chapter']).strip() if pd.notna(row['chapter']) else "",
+                        'college_name': str(row['college_name']).strip() if pd.notna(row['college_name']) else "",
+                        'phone': str(row['phone']).strip() if pd.notna(row['phone']) else "",
+                        'address': str(row['Address']).strip() if pd.notna(row['Address']) else "",
+                        'city': str(row['city']).strip() if pd.notna(row['city']) else "",
+                        'state': str(row['State']).strip() if pd.notna(row['State']) else "",
+                        'country': str(row['Country']).strip() if pd.notna(row['Country']) else "",
+                        'zip_code': str(row['zip_code']).strip() if pd.notna(row['zip_code']) else "",
+                        'role': role,
+                        'course_end_year': str(row['Course End Year']).strip() if pd.notna(row['Course End Year']) else "",
+                        'worked_in': [w.strip() for w in str(row['worked_In']).split(',')] if pd.notna(row['worked_In']) and row['worked_In'] else [],
+                        'is_staff': is_staff,
                     }
-                    
-                    # Process industries worked in
-                    worked_in = row.get('Worked_In', '')
-                    if worked_in and not pd.isna(worked_in):
-                        user_data['Worked_in'] = [industry.strip() for industry in str(worked_in).split(',')]
-                    
-                    # Create user
-                    user = User.objects.create_user(
+
+                    User.objects.create_user(
                         **user_data,
                         password=password,
                     )
-                    
                     success_count += 1
-                    
+                    print(f"Uploaded user {success_count}: {username}")  # <-- Print to terminal
                 except Exception as e:
                     error_details.append(f"Row {idx+1}: {str(e)}")
-            
-            # Prepare response
+
             response_data = {
                 "success_count": success_count,
                 "total_rows": len(df),
                 "errors": error_details
             }
-            
             if success_count > 0:
                 return Response(response_data, status=status.HTTP_201_CREATED)
             else:
                 return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
-                
         except Exception as e:
             return Response(
                 {"error": f"Failed to process file: {str(e)}"},
