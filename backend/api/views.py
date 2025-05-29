@@ -33,7 +33,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.utils.encoding import force_bytes
 from rest_framework.authtoken.models import Token
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import IsAdminUser,IsAuthenticated
 from rest_framework import status, permissions, generics
 from django.contrib.auth import get_user_model, authenticate
 from rest_framework.generics import ListAPIView
@@ -787,7 +787,7 @@ class AlumniAdminFilterView(ListAPIView):
     """
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAuthenticated]
     pagination_class = AlumniPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = AlumniAdminFilter
