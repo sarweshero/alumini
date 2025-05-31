@@ -762,7 +762,7 @@ class AlumniPagination(PageNumberPagination):
     
 class AlumniAdminFilter(django_filters.FilterSet):
     roles_played = django_filters.CharFilter(method='filter_roles_played')
-    worked_in = django_filters.CharFilter(method='filter_worked_in')
+    Worked_in = django_filters.CharFilter(method='filter_Worked_in')
 
     class Meta:
         model = User
@@ -777,8 +777,8 @@ class AlumniAdminFilter(django_filters.FilterSet):
     def filter_roles_played(self, queryset, name, value):
         return queryset.filter(roles_played__icontains=value)
 
-    def filter_worked_in(self, queryset, name, value):
-        return queryset.filter(worked_in__icontains=value)
+    def filter_Worked_in(self, queryset, name, value):
+        return queryset.filter(Worked_in__icontains=value)
 
 class AlumniAdminFilterView(ListAPIView):
     """
