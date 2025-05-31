@@ -794,7 +794,7 @@ class AlumniAdminFilterView(ListAPIView):
 
     search_fields = [
         'username', 'email', 'first_name', 'last_name', 'current_work',
-        'roles_played', 'Worked_in', 'college_name', 'phone', 'address', 'city'
+        'roles_played', 'Worked_in', 'college_name', 'phone', 'Address', 'city'
     ]
     ordering_fields = '__all__'
     ordering = ['-id']
