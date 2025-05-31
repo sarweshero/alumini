@@ -1834,7 +1834,8 @@ class BusinessCategoriesView(APIView):
         categories = BusinessDirectory.objects.exclude(category='') \
                                            .values('category') \
                                            .annotate(count=Count('id'))
-
+        return Response(categories, status=status.HTTP_200_OK)
+    
 class BusinessSearchView(generics.ListAPIView):
     serializer_class = BusinessDirectorySerializer
     permission_classes = [permissions.IsAuthenticated]
