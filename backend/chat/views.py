@@ -2,6 +2,7 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
+from django.db.models import Q, Case, When, IntegerField
 from .models import ChatRoom, Message
 from .serializers import ChatRoomSerializer, MessageSerializer, UserSerializer
 
@@ -127,4 +128,30 @@ class ContactSearchAPIView(generics.ListAPIView):
 
     def get_queryset(self):
         query = self.request.query_params.get("q", "")
-        return User.objects.filter(username__icontains=query).exclude(id=self.request.user.id)
+        qs = User.objects.filter(
+            Q(username__icontains=query) |
+            Q(first_name__icontains=query) |
+            Q(last_name__icontains=query)
+        ).exclude(id=self.request.user.id)
+        if qs.count() > 40:
+            # Order by relevance: username match > first_name match > last_name match > id
+            qs = qs.annotate(
+                username_match=Case(
+                    When(username__iexact=query, then=1),
+                    default=0,
+                    output_field=IntegerField(),
+                ),
+                first_name_match=Case(
+                    When(first_name__iexact=query, then=1),
+                    default=0,
+                    output_field=IntegerField(),
+                ),
+                last_name_match=Case(
+                    When(last_name__iexact=query, then=1),
+                    default=0,
+                    output_field=IntegerField(),
+                ),
+            ).order_by(
+                '-username_match', '-first_name_match', '-last_name_match', 'id'
+            )[:40]
+        return qs
