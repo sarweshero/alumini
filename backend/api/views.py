@@ -1901,8 +1901,8 @@ class NewsRoomListCreateView(APIView):
     def post(self, request):
         """Create a new news article"""
         # Only staff or admin can create news
-        if request.user.role not in ["Staff", "Admin"]:
-            return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+        # if request.user.role not in ["Staff", "Admin"]:
+        #     return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
             
         news_data = request.data.dict() if hasattr(request.data, 'dict') else request.data
         
@@ -1948,7 +1948,7 @@ class NewsRoomDetailView(APIView):
         news_article = self.get_object(pk)
         
         # Only the author, staff, or admin can update
-        if news_article.user != request.user and request.user.role not in ["Staff", "Admin"]:
+        if news_article.user != request.user or request.user.role not in ["Staff", "Admin"]:
             return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
         
         news_data = request.data.dict() if hasattr(request.data, 'dict') else request.data
@@ -1968,7 +1968,7 @@ class NewsRoomDetailView(APIView):
         news_article = self.get_object(pk)
         
         # Only the author, staff, or admin can delete
-        if news_article.user != request.user and request.user.role not in ["Staff", "Admin"]:
+        if news_article.user != request.user or request.user.role not in ["Staff", "Admin"]:
             return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
         
         news_article.delete()
@@ -1998,7 +1998,7 @@ class NewsImagesView(APIView):
             return Response({"error": "News article not found"}, status=status.HTTP_404_NOT_FOUND)
         
         # Check permissions
-        if news_article.user != request.user and request.user.role not in ["Staff", "Admin"]:
+        if news_article.user != request.user or request.user.role not in ["Staff", "Admin"]:
             return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
         
         images = request.FILES.getlist('images')
@@ -2021,7 +2021,7 @@ class NewsImagesView(APIView):
         news_article = image.news_article
         
         # Check permissions
-        if news_article.user != request.user and request.user.role not in ["Staff", "Admin"]:
+        if news_article.user != request.user or request.user.role not in ["Staff", "Admin"]:
             return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
         
         image.delete()
