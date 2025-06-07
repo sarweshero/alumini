@@ -623,6 +623,26 @@ class ApproveSignupView(APIView):
         
         return Response({"message": "Pending signup request deleted"}, status=status.HTTP_200_OK)
 
+class UserStatisticsView(APIView):
+    """View for retrieving total users and new users statistics."""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        """
+        Get statistics about total users and new users.
+        
+        Returns:
+            - total_users: Total number of users in the system
+            - new_users: Number of users created in the last 30 days
+        """
+        total_users = User.objects.count()
+        thirty_days_ago = timezone.now() - timedelta(days=30)
+        new_users = User.objects.filter(date_joined__gte=thirty_days_ago).count()
+
+        return Response({
+            "total_users": total_users,
+            "new_users": new_users
+        }, status=status.HTTP_200_OK)
 
 #####################################
 #          PROFILE VIEWS            #
