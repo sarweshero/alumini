@@ -213,8 +213,8 @@ class Events(models.Model):
     tag = models.CharField(max_length=255, blank=True)
     uploaded_by = models.CharField(
         max_length=10,
-        choices=[('Student', 'Student'), ('Staff', 'Staff'), ('Admin', 'Admin')],
-        default='Student'
+        choices=[('Student', 'Student'), ('Staff', 'Staff'), ('Admin', 'Admin'), ('Alumni', 'Alumni')],
+        default='Alumni'
     )
 
     def __str__(self):
