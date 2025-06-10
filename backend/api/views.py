@@ -1426,6 +1426,9 @@ class HomePageDataView(APIView):
             featured=True
         ).order_by('-published_on')[:5]
         news_serializer = NewsRoomSerializer(featured_news, many=True)
+        total_users = User.objects.count()
+        thirty_days_ago = timezone.now() - timedelta(days=30)
+        new_users = User.objects.filter(date_joined__gte=thirty_days_ago).count()
         
         # Compile and return response
         return Response({
@@ -1434,7 +1437,10 @@ class HomePageDataView(APIView):
             'latest_members': members_serializer.data,
             'batch_mates': batch_mates_serializer.data,
             'chapters': chapters,
-            'featured_news': news_serializer.data 
+            'featured_news': news_serializer.data,
+            "total_users": total_users,
+            "new_users": new_users 
+            
         }, status=status.HTTP_200_OK)
 
 
