@@ -443,26 +443,39 @@ class SignupOTPView(APIView):
         )
 
 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.utils import timezone
+from datetime import timedelta
+from django.db import models
+from django.contrib.auth import get_user_model
+
+from api.models import PendingSignup, SignupOTP  # Adjust if your model paths differ
+
+User = get_user_model()
+
+
 class SignupView(APIView):
     """View for user signup with OTP verification."""
-    
+
     def post(self, request):
         """
         Create a pending signup request after OTP verification.
-        
+
         Returns:
             Success message if signup request was submitted
         """
         email = request.data.get("email")
         otp = request.data.get("otp")
         username = request.data.get("username", email)
-        
+
         # Get all model field names excluding specific ones
         user_fields = [
             f.name for f in PendingSignup._meta.fields 
             if f.name not in ("id", "created_at", "is_approved", "approved_at", "username", "password", "email")
         ]
-        
+
         # Define required fields for signup
         required_fields = ["first_name", "college_name", "role", "phone", "password"]
         missing = [field for field in required_fields if not request.data.get(field)]
@@ -486,32 +499,43 @@ class SignupView(APIView):
                 otp_entry.delete()
             return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Prepare data for pending signup
-        pending_data = {field: request.data.get(field, "") for field in user_fields}
+        # Prepare data for pending signup with type-safe conversions
+        pending_data = {}
+        for field in user_fields:
+            value = request.data.get(field, "")
+            model_field = PendingSignup._meta.get_field(field)
+
+            # Handle Integer or Float fields
+            if isinstance(model_field, (models.IntegerField, models.FloatField)):
+                try:
+                    value = int(value) if value not in ("", None) else 0
+                except ValueError:
+                    return Response({"error": f"Invalid value for '{field}'. Must be a number."}, status=400)
+
+            # Handle Date or DateTime fields
+            elif isinstance(model_field, (models.DateField, models.DateTimeField)):
+                value = value or None  # Django will parse if valid, else error at DB level
+
+            pending_data[field] = value
+
+        # Set extra required fields
         pending_data['email'] = email
         pending_data['username'] = username
         pending_data['password'] = request.data.get("password")
-
-        # Convert all DateField empty strings to None
-        for field in PendingSignup._meta.fields:
-            if isinstance(field, (models.DateField, models.DateTimeField)):
-                if pending_data.get(field.name) == "":
-                    pending_data[field.name] = None
 
         # Create or update pending signup
         PendingSignup.objects.update_or_create(
             email=email,
             defaults=pending_data
         )
-        
+
         # Delete the used OTP
         otp_entry.delete()
-        
+
         return Response(
-            {"message": "Signup request submitted. Await admin approval."}, 
+            {"message": "Signup request submitted. Await admin approval."},
             status=status.HTTP_200_OK
         )
-    
 
 class ApproveSignupView(APIView):
     """View for listing and approving pending signup requests."""
