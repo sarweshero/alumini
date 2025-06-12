@@ -1443,7 +1443,8 @@ class HomePageDataView(APIView):
                     passed_out_year=request.user.passed_out_year
                 ).exclude(id=request.user.id).order_by('first_name')[:20]
             batch_mates_serializer = UserSerializer(batch_mates, many=True)
-        
+            
+        batch_mates_data = batch_mates_serializer.data if batch_mates_serializer else []
         # Chapters - Get all unique chapters and count of users in each
         chapters = User.objects.exclude(chapter='').values('chapter').annotate(
             member_count=Count('id')
@@ -1464,7 +1465,7 @@ class HomePageDataView(APIView):
             'upcoming_events': events_serializer.data,
             'latest_album_images': album_images_serializer.data,
             'latest_members': members_serializer.data,
-            'batch_mates': batch_mates_serializer.data,
+            'batch_mates': batch_mates_data,
             'chapters': chapters,
             'featured_news': news_serializer.data,
             "total_users": total_users,
