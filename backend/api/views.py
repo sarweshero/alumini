@@ -1432,16 +1432,16 @@ class HomePageDataView(APIView):
         album_images_serializer = AlbumSerializer(latest_album_images, many=True)
         
         # Latest Members
-        latest_members = User.objects.all().order_by('passed_out_year')[:10]
+        latest_members = User.objects.filter(profile_photo__isnull=False).exclude(profile_photo='').order_by('passed_out_year')[:10]
         members_serializer = UserSerializer(latest_members, many=True)
-        
+        if request.user:
         # Batch Mates - Get users from same passed_out_year as current user
-        batch_mates = []
-        if request.user.passed_out_year:
-            batch_mates = User.objects.filter(
-                passed_out_year=request.user.passed_out_year
-            ).exclude(id=request.user.id).order_by('first_name')[:20]
-        batch_mates_serializer = UserSerializer(batch_mates, many=True)
+            batch_mates = []
+            if request.user.passed_out_year:
+                batch_mates = User.objects.filter(
+                    passed_out_year=request.user.passed_out_year
+                ).exclude(id=request.user.id).order_by('first_name')[:20]
+            batch_mates_serializer = UserSerializer(batch_mates, many=True)
         
         # Chapters - Get all unique chapters and count of users in each
         chapters = User.objects.exclude(chapter='').values('chapter').annotate(
