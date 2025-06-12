@@ -737,7 +737,7 @@ class UserProfileView(APIView):
         return Response(response_data, status=status.HTTP_200_OK)
 class BirthdayListView(APIView):
     """View for listing user birthdays in the upcoming 15 days."""
-    permission_classes = [permissions.IsAuthenticated]
+    # permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
         """Get users whose birthdays are within the next 15 days."""
@@ -811,11 +811,12 @@ class AlumniAdminFilter(django_filters.FilterSet):
     class Meta:
         model = User
         fields = [
-            'username', 'email', 'first_name', 'last_name', 'salutation', 'gender',
-            'date_of_birth', 'current_work', 'chapter', 'college_name',
-            'phone',  # REMOVE 'address' if not a model field!
+            'username', 'email', 'first_name', 'last_name', 'gender',
+            'date_of_birth', 'current_work', 'college_name',
+            'phone',  # REMOVE 'address' if not a model field!, 'chapter', 'salutation',
             'city', 'state', 'country', 'zip_code', 'role',
-            'course_end_year', 'is_staff', 'is_active', 'is_superuser'
+            'course_end_year', 'company', 'position', 'course'
+            # 'is_staff', 'is_active', 'is_superuser', 'chapter'
         ]
 
     def filter_roles_played(self, queryset, name, value):
@@ -837,8 +838,8 @@ class AlumniAdminFilterView(ListAPIView):
     filterset_class = AlumniAdminFilter
 
     search_fields = [
-        'username', 'email', 'first_name', 'last_name', 'current_work',
-        'roles_played', 'Worked_in', 'college_name', 'phone', 'Address', 'city'
+        'username', 'first_name', 'last_name' #, 'current_work',
+        # 'roles_played', 'Worked_in', 'college_name', 'phone', 'Address', 'city'
     ]
     ordering_fields = '__all__'
     ordering = ['first_name', 'last_name', 'username', 'college_name']
@@ -853,8 +854,8 @@ class AlumniAdminFilterView(ListAPIView):
 
 class EventView(APIView):
     """View for listing and creating events."""
-    permission_classes = [permissions.IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
+    permission_classes = [permissions.AllowAny]
     
     def get(self, request):
         """Get all events, ordered by upload date."""
@@ -863,6 +864,8 @@ class EventView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
         
     def post(self, request, *args, **kwargs):
+        permission_classes = [permissions.IsAuthenticated]
+
         """
         Create a new event with optional images.
         
@@ -956,7 +959,7 @@ class EventDetailView(APIView):
 
 class JobListCreateView(APIView):
     """View for listing and creating jobs."""
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     parser_classes = (MultiPartParser, FormParser)
     
     def get(self, request):
@@ -966,6 +969,7 @@ class JobListCreateView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
         
     def post(self, request):
+        permission_classes = [permissions.IsAuthenticated]
         """
         Create a new job listing with optional images.
         
@@ -1401,7 +1405,7 @@ class AlbumImagesView(APIView):
 
 class HomePageDataView(APIView):
     """View for aggregating data for the home page."""
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     
     def get(self, request):
         """

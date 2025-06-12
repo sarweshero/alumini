@@ -206,4 +206,3 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "sarweshwardeivasihamani@gmail.com")  
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "uppu upkj mkfx xhwu")  
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
-
