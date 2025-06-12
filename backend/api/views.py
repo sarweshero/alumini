@@ -788,6 +788,28 @@ class BirthdayListView(APIView):
             response_data.append(user_data)
 
         return Response(response_data, status=status.HTTP_200_OK)
+    
+class DropdownFiltersView(APIView):
+    """API to fetch distinct values for dropdown filters."""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        filters_data = {
+            "current_work": User.objects.exclude(current_work__isnull=True).exclude(current_work="").values_list("current_work", flat=True).distinct(),
+            "college_name": User.objects.exclude(college_name__isnull=True).exclude(college_name="").values_list("college_name", flat=True).distinct(),
+            "city": User.objects.exclude(city__isnull=True).exclude(city="").values_list("city", flat=True).distinct(),
+            "country": User.objects.exclude(country__isnull=True).exclude(country="").values_list("country", flat=True).distinct(),
+            "role": User.objects.exclude(role__isnull=True).exclude(role="").values_list("role", flat=True).distinct(),
+            "course_end_year": User.objects.exclude(course_end_year__isnull=True).exclude(course_end_year="").values_list("course_end_year", flat=True).distinct(),
+            "company": User.objects.exclude(company__isnull=True).exclude(company="").values_list("company", flat=True).distinct(),
+            "position": User.objects.exclude(position__isnull=True).exclude(position="").values_list("position", flat=True).distinct(),
+            "course": User.objects.exclude(course__isnull=True).exclude(course="").values_list("course", flat=True).distinct(),
+        }
+
+        # Convert QuerySets to lists for JSON serialization
+        filters_data = {key: list(values) for key, values in filters_data.items()}
+
+        return Response(filters_data, status=200)
 
 class LatestMembersView(APIView):
     """View for listing recent members."""
