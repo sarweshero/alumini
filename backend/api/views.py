@@ -1446,18 +1446,17 @@ class HomePageDataView(APIView):
         today = now.date()
         
         # Upcoming Events
-        upcoming_events = Events.objects.filter(from_date_time__gte=now).order_by('from_date_time')[:10]
+        upcoming_events = Events.objects.filter(from_date_time__gte=now).order_by('from_date_time')[:3]
         events_serializer = EventSerializer(upcoming_events, many=True)
         
         # Latest Album Images 
-        latest_album_images = Album.objects.all().order_by('-id')[:10]
+        latest_album_images = Album.objects.all().order_by('-id')[:5]
         album_images_serializer = AlbumSerializer(latest_album_images, many=True)
         
         # Latest Members
-        users_with_photos = User.objects.filter(profile_photo__isnull=False).exclude(profile_photo='').order_by('passed_out_year')[:10]
-        users_without_photos = User.objects.filter(Q(profile_photo__isnull=True) | Q(profile_photo='')).order_by('-id')[:10 - users_with_photos.count()]
-        latest_members = list(users_with_photos) + list(users_without_photos)
-        members_serializer = UserSerializer(latest_members, many=True)
+        users_with_photos = User.objects.filter(profile_photo__isnull=False).exclude(profile_photo='').order_by('-id')[:3]
+        # latest_members = list(users_with_photos)
+        members_serializer = UserSerializer(users_with_photos, many=True)
         batch_mates_serializer = None
         if request.user.is_authenticated:
         # Batch Mates - Get users from same passed_out_year as current user
@@ -1465,7 +1464,7 @@ class HomePageDataView(APIView):
             if request.user.passed_out_year:
                 batch_mates = User.objects.filter(
                     passed_out_year=request.user.passed_out_year
-                ).exclude(id=request.user.id).order_by('first_name')[:20]
+                ).exclude(id=request.user.id).order_by('first_name')[:10]
             batch_mates_serializer = UserSerializer(batch_mates, many=True)
             
         batch_mates_data = batch_mates_serializer.data if batch_mates_serializer else []
