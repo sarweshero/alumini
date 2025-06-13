@@ -1446,7 +1446,7 @@ class HomePageDataView(APIView):
         today = now.date()
         
         # Upcoming Events
-        upcoming_events = Events.objects.filter('-id').order_by('from_date_time')[:3]
+        upcoming_events = Events.objects.all().order_by('from_date_time')[:3]
         events_serializer = EventSerializer(upcoming_events, many=True)
         
         # Latest Album Images 
