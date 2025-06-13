@@ -1455,7 +1455,7 @@ class HomePageDataView(APIView):
         
         # Latest Members
         users_with_photos = User.objects.filter(profile_photo__isnull=False).exclude(profile_photo='').order_by('passed_out_year')[:10]
-        users_without_photos = User.objects.filter(Q(profile_photo__isnull=True) | Q(profile_photo='')).order_by('passed_out_year')[:10 - users_with_photos.count()]
+        users_without_photos = User.objects.filter(Q(profile_photo__isnull=True) | Q(profile_photo='')).order_by('-id')[:10 - users_with_photos.count()]
         latest_members = list(users_with_photos) + list(users_without_photos)
         members_serializer = UserSerializer(latest_members, many=True)
         batch_mates_serializer = None
@@ -1475,10 +1475,7 @@ class HomePageDataView(APIView):
         ).order_by('-member_count')
         
         # Add featured news
-        featured_news = NewsRoom.objects.filter(
-            status='published', 
-            featured=True
-        ).order_by('-published_on')[:5]
+        featured_news = NewsRoom.objects.all().order_by('-published_on')[:3]
         news_serializer = NewsRoomSerializer(featured_news, many=True)
         total_users = User.objects.count()
         thirty_days_ago = timezone.now() - timedelta(days=30)
