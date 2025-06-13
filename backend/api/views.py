@@ -1454,7 +1454,9 @@ class HomePageDataView(APIView):
         album_images_serializer = AlbumSerializer(latest_album_images, many=True)
         
         # Latest Members
-        latest_members = User.objects.filter(profile_photo__isnull=False).exclude(profile_photo='').order_by('passed_out_year')[:10]
+        users_with_photos = User.objects.filter(profile_photo__isnull=False).exclude(profile_photo='').order_by('passed_out_year')[:10]
+        users_without_photos = User.objects.filter(Q(profile_photo__isnull=True) | Q(profile_photo='')).order_by('passed_out_year')[:10 - users_with_photos.count()]
+        latest_members = list(users_with_photos) + list(users_without_photos)
         members_serializer = UserSerializer(latest_members, many=True)
         batch_mates_serializer = None
         if request.user.is_authenticated:
