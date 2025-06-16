@@ -1480,7 +1480,10 @@ class HomePageDataView(APIView):
         total_users = User.objects.count()
         thirty_days_ago = timezone.now() - timedelta(days=30)
         new_users = User.objects.filter(date_joined__gte=thirty_days_ago).count()
-        
+        # Count upcoming events
+        upcoming_events_count = Events.objects.filter(from_date_time__gte=datetime.now()).count()
+        # Count albums
+        albums_count = Album.objects.count()
         # Compile and return response
         return Response({
             'upcoming_events': events_serializer.data,
@@ -1490,7 +1493,9 @@ class HomePageDataView(APIView):
             'chapters': chapters,
             'featured_news': news_serializer.data,
             "total_users": total_users,
-            "new_users": new_users 
+            "new_users": new_users ,
+            "upcoming_events": upcoming_events_count,
+            "albums_count": albums_count,
             
         }, status=status.HTTP_200_OK)
 
