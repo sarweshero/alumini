@@ -801,7 +801,7 @@ class DropdownFiltersView(APIView):
             "state": User.objects.exclude(state__isnull=True).exclude(state="").values_list("state", flat=True).distinct(),
             "country": User.objects.exclude(country__isnull=True).exclude(country="").values_list("country", flat=True).distinct(),
             "role": User.objects.exclude(role__isnull=True).exclude(role="").values_list("role", flat=True).distinct(),
-            "course_end_year": User.objects.exclude(course_end_year__isnull=True).exclude(course_end_year="").values_list("course_end_year", flat=True).distinct(),
+            "passed_out_year": User.objects.exclude(passed_out_year__isnull=True).exclude(passed_out_year="").values_list("passed_out_year", flat=True).distinct(),
             # "company": User.objects.exclude(company__isnull=True).exclude(company="").values_list("company", flat=True).distinct(),
             # "position": User.objects.exclude(position__isnull=True).exclude(position="").values_list("position", flat=True).distinct(),
             "course": User.objects.exclude(course__isnull=True).exclude(course="").values_list("course", flat=True).distinct(),
