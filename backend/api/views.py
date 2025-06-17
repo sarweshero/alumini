@@ -873,7 +873,7 @@ class AlumniAdminFilterView(ListAPIView):
         search_query = self.request.query_params.get('search', None)
         if search_query:
             queryset = queryset.filter(
-            Q(first_name__iexact=search_query) | Q(last_name__iexact=search_query) #| Q(username__iexact=search_query)
+            Q(first_name__iexact=search_query) | Q(last_name__iexact=search_query) | Q(first_name__icontains=search_query)
             )
 
         return queryset
