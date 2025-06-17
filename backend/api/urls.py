@@ -51,6 +51,8 @@ urlpatterns = [
     path('news/categories/', NewsCategoriesView.as_view(), name='news-categories'),
     path('dropdown-filters/', DropdownFiltersView.as_view(), name='dropdown-filters'),
     path('send-email/', SendEmailAPIView.as_view(), name='send_email'),
+    path('email-suggestions/', EmailSuggestionAPIView.as_view(), name='email_suggestions'),
+
 
 ]
 

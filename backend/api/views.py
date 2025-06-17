@@ -2193,6 +2193,28 @@ class SendEmailAPIView(APIView):
             return Response({"message": "Email sent successfully."}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+class EmailSuggestionAPIView(APIView):
+    """API to provide email suggestions while typing."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """
+        Suggest emails based on the query.
+
+        Query Parameters:
+        - query: Partial email string to search for
+
+        Returns:
+            List of matching email suggestions
+        """
+        query = request.query_params.get('query', '').strip()
+        if not query:
+            return Response({"error": "Query parameter is required."}, status=400)
+
+        # Filter emails based on the query
+        suggestions = User.objects.filter(email__icontains=query).values_list('email', flat=True)[:10]
+        return Response({"suggestions": list(suggestions)}, status=200)
 
 # import pandas as pd
 # from datetime import datetime
