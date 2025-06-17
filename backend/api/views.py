@@ -840,11 +840,11 @@ class AlumniAdminFilter(django_filters.FilterSet):
             # 'is_staff', 'is_active', 'is_superuser', 'chapter'
         ]
 
-    def filter_roles_played(self, queryset, name, value):
-        return queryset.filter(roles_played__icontains=value)
+    def filter_roles_played(self, queryset, value):
+        return queryset.filter(Q(roles_played__startswith=value) | Q(roles_played__icontains=value))
 
-    def filter_Worked_in(self, queryset, name, value):
-        return queryset.filter(Worked_in__icontains=value)
+    def filter_Worked_in(self, queryset, value):
+        return queryset.filter(Q(Worked_in__startswith=value) | Q(Worked_in__icontains=value))
 
 class AlumniAdminFilterView(ListAPIView):
     """
@@ -868,6 +868,14 @@ class AlumniAdminFilterView(ListAPIView):
     def get_queryset(self):
         queryset = super().get_queryset()
         queryset = queryset.exclude(id=self.request.user.id)
+
+        # Exact match for search query
+        search_query = self.request.query_params.get('search', None)
+        if search_query:
+            queryset = queryset.filter(
+            Q(first_name__iexact=search_query) | Q(last_name__iexact=search_query) #| Q(username__iexact=search_query)
+            )
+
         return queryset
 #####################################
 #           EVENT VIEWS             #
