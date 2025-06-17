@@ -178,7 +178,7 @@ class BusinessDirectorySerializer(serializers.ModelSerializer):
     class Meta:
         model = models.BusinessDirectory
         fields = [
-            'id', 'owner', 'owner_details', 'business_name', 'description', 
+            'id', 'owner_details', 'business_name', 'description', 
             'category', 'website', 'email', 'phone', 'address', 'city', 
             'state', 'country', 'postal_code', 'year_founded', 
             'employee_count', 'logo', 'social_media', 'keywords', 
