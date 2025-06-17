@@ -2126,7 +2126,73 @@ class NewsCategoriesView(APIView):
                                     .annotate(count=Count('id')) \
                                     .order_by('-count')
         return Response(categories, status=status.HTTP_200_OK)
-    
+
+from django.core.mail import EmailMessage
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+
+class SendEmailAPIView(APIView):
+    """API to send emails with media attachments."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """
+        Send an email to the specified recipients, all users, or users by role.
+
+        Payload:
+        - subject: Email subject
+        - body: Email body
+        - send_to_all: Boolean flag to send email to all users
+        - role: Role to filter recipients (e.g., 'Alumni', 'Staff')
+        - recipients: List of recipient email addresses (optional if send_to_all or role is provided)
+        - attachments: List of files to attach (optional)
+
+        Returns:
+            Success or error message
+        """
+        subject = request.data.get('subject')
+        body = request.data.get('body')
+        send_to_all = request.data.get('send_to_all', False)
+        role = request.data.get('role', None)
+        recipients = request.data.get('recipients', [])
+        attachments = request.FILES.getlist('attachments')
+
+        if not subject or not body:
+            return Response(
+                {"error": "Subject and body are required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Retrieve all user emails if send_to_all is True
+        if send_to_all:
+            recipients = list(User.objects.values_list('email', flat=True))
+        elif role:
+            # Filter users by role
+            recipients = list(User.objects.filter(role=role).values_list('email', flat=True))
+
+        if not recipients:
+            return Response(
+                {"error": "No recipients found."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            email = EmailMessage(
+                subject=subject,
+                body=body,
+                to=recipients
+            )
+
+            # Attach files if provided
+            for attachment in attachments:
+                email.attach(attachment.name, attachment.read(), attachment.content_type)
+
+            email.send()
+            return Response({"message": "Email sent successfully."}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # import pandas as pd
 # from datetime import datetime

@@ -203,6 +203,11 @@ EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = "smtp.gmail.com"
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "sarweshwardeivasihamani@gmail.com")  
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "uppu upkj mkfx xhwu")  
+EMAIL_USE_SSL = False  # Ensure SSL is disabled when using TLS
+
+# Additional settings for handling bulk emails
+EMAIL_BATCH_SIZE = 100  # Number of emails to send in a single batch
+EMAIL_THROTTLE_SECONDS = 1  # Delay between sending batches to avoid server overload
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
