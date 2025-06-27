@@ -121,10 +121,10 @@ JAZZMIN_SETTINGS = {
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'alum',
-        'USER': 'alumni',
-        'PASSWORD': 'Kahe@Alumni',
-        'HOST': '134.209.157.195',
+        'NAME': 'Alum',
+        'USER': 'alumuser',
+        'PASSWORD': 'password',
+        'HOST': '209.38.121.118',
         'PORT': '5432',
     }
 }
