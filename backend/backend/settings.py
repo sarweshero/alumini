@@ -121,7 +121,7 @@ JAZZMIN_SETTINGS = {
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'Alum',
+        'NAME': 'alum',
         'USER': 'alumuser',
         'PASSWORD': 'password',
         'HOST': '209.38.121.118',
