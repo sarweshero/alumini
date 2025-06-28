@@ -23,9 +23,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-ocr&)qgrmz+4e6+&%1%h6wdw9$ert45kw#94(-bn^+zsb2elc#'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = ['www.karpagamalumni.in', 'karpagamalumni.in']
 
 AUTH_USER_MODEL = "api.CustomUser"
 
@@ -107,17 +107,6 @@ JAZZMIN_SETTINGS = {
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'postgres',
-#         'USER': 'postgres.ojkwtilsrkblncgilzvh',
-#         'PASSWORD': 'KAHE@alumni.',  # Replace with actual password
-#         'HOST': 'aws-0-ap-south-1.pooler.supabase.com',
-#         'PORT': '6543',
-#     }
-# }
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -186,6 +175,7 @@ CHANNEL_LAYERS = {
         },
     },
 }
+
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels.layers.InMemoryChannelLayer",
