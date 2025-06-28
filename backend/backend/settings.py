@@ -25,8 +25,7 @@ SECRET_KEY = 'django-insecure-ocr&)qgrmz+4e6+&%1%h6wdw9$ert45kw#94(-bn^+zsb2elc#
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-# ALLOWED_HOSTS = ['www.karpagamalumni.in', 'karpagamalumni.in', '209.38.121.118']
-ALLOWED_HOSTS = ['*'] 
+ALLOWED_HOSTS = ["*"]
 
 AUTH_USER_MODEL = "api.CustomUser"
 
