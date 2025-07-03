@@ -2216,68 +2216,68 @@ class EmailSuggestionAPIView(APIView):
         suggestions = User.objects.filter(email__icontains=query).values_list('email', flat=True)[:10]
         return Response({"suggestions": list(suggestions)}, status=200)
 
-# import pandas as pd
-# from datetime import datetime
-# from .models import CustomUser
+import pandas as pd
+from datetime import datetime
+from .models import CustomUser
 
-# def map_and_save_users(csv_path):
-#     # Load CSV data
-#     data = pd.read_csv(csv_path)
+def map_and_save_users(csv_path):
+    # Load CSV data
+    data = pd.read_csv(csv_path)
 
-#     for _, row in data.iterrows():
-#         try:
-#             dob_str = str(row.get("Date of Birth")).strip()
+    for _, row in data.iterrows():
+        try:
+            dob_str = str(row.get("Date of Birth")).strip()
 
-#             # Skip if DOB is missing or invalid
-#             if not dob_str or dob_str.lower() in ["nan", "null"]:
-#                 print(f"❌ Skipped user due to missing DOB: {row.get('email_id')}")
-#                 continue
+            # Skip if DOB is missing or invalid
+            if not dob_str or dob_str.lower() in ["nan", "null"]:
+                print(f"❌ Skipped user due to missing DOB: {row.get('email_id')}")
+                continue
 
-#             # Parse DOB (auto-detect format)
-#             dob = pd.to_datetime(dob_str, errors='raise', dayfirst=False)
-#             password = dob.strftime("%d%m%Y")  # Convert to DDMMYYYY
+            # Parse DOB (auto-detect format)
+            dob = pd.to_datetime(dob_str, errors='raise', dayfirst=False)
+            password = dob.strftime("%d%m%Y")  # Convert to DDMMYYYY
 
-#             # Clean and prepare fields
-#             email = row.get("email_id", "").strip()
-#             name = row.get("Name", "").strip()
-#             salutation = row.get("Salutation", "").strip() if pd.notna(row.get("Salutation")) else None
-#             gender = row.get("Gender", "").strip() if pd.notna(row.get("Gender")) else "Nil"
-#             course = row.get("course", "").strip()
-#             role = row.get("role", "Alumni").strip()
+            # Clean and prepare fields
+            email = row.get("email_id", "").strip()
+            name = row.get("Name", "").strip()
+            salutation = row.get("Salutation", "").strip() if pd.notna(row.get("Salutation")) else None
+            gender = row.get("Gender", "").strip() if pd.notna(row.get("Gender")) else "Nil"
+            course = row.get("course", "").strip()
+            role = row.get("role", "Alumni").strip()
 
-#             # Build user data
-#             user_data = {
-#                 "username": email,
-#                 "first_name": name,
-#                 "salutation": salutation,
-#                 "is_active": True,
-#                 "is_staff": role.lower() in ["staff", "admin"],
-#                 "is_superuser": role.lower() == "admin",
-#                 "gender": gender,
-#                 "date_of_birth": dob,
-#                 "course": course,
-#                 "email": email,
-#                 "role": role,
-#             }
+            # Build user data
+            user_data = {
+                "username": email,
+                "first_name": name,
+                "salutation": salutation,
+                "is_active": True,
+                "is_staff": role.lower() in ["staff", "admin"],
+                "is_superuser": role.lower() == "admin",
+                "gender": gender,
+                "date_of_birth": dob,
+                "course": course,
+                "email": email,
+                "role": role,
+            }
 
-#             # Create or update user
-#             user, created = CustomUser.objects.update_or_create(
-#                 username=email,
-#                 defaults=user_data
-#             )
+            # Create or update user
+            user, created = CustomUser.objects.update_or_create(
+                username=email,
+                defaults=user_data
+            )
 
-#             if created:
-#                 user.set_password(password)
-#                 user.save()
-#                 print(f"[CREATED] {email} | Name: {name} | Password: {password}")
-#             else:
-#                 print(f"[UPDATED] {email} | Name: {name}")
+            if created:
+                user.set_password(password)
+                user.save()
+                print(f"[CREATED] {email} | Name: {name} | Password: {password}")
+            else:
+                print(f"[UPDATED] {email} | Name: {name}")
 
-#         except Exception as e:
-#             print(f"[ERROR] {row.get('email_id')} | {e}")
+        except Exception as e:
+            print(f"[ERROR] {row.get('email_id')} | {e}")
 
-#     print("✅ Data mapping and saving completed.")
+    print("✅ Data mapping and saving completed.")
 
-# # Example usage
-# csv_path = "d:\\alumini\\registered_users_with_roles.csv"
-# map_and_save_users(csv_path)
+# Example usage
+csv_path = "d:\\alumini\\registered_users_with_roles.csv"
+map_and_save_users(csv_path)
