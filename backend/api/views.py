@@ -2266,7 +2266,7 @@ def map_and_save_users(csv_path):
             user_data = {
                 "username": email,
                 "first_name": name,
-                "salutation": salutation if salutation else None,
+                "salutation": salutation if salutation else " ",
                 # "is_active": True,
                 # "is_staff": role.lower() in ["staff", "admin"],
                 # "is_superuser": role.lower() == "admin",
@@ -2284,9 +2284,7 @@ def map_and_save_users(csv_path):
             )
 
             if created:
-                user.set_password(password)
-                user.save()
-                print(f"[CREATED] {email} | Name: {name} | Password: {password}")
+                print(f"[CREATED] {email} | Name: {name}")
             else:
                 print(f"[UPDATED] {email} | Name: {name}")
 
