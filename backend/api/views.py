@@ -1483,7 +1483,7 @@ class HomePageDataView(APIView):
         # Add featured news
         featured_news = NewsRoom.objects.all().order_by('-published_on')[:3]
         news_serializer = NewsRoomSerializer(featured_news, many=True)
-        total_users = User.objects.count()
+        total_users = User.objects.count() + PendingSignup.objects.count()
         thirty_days_ago = timezone.now() - timedelta(days=30)
         new_users = User.objects.filter(date_joined__gte=thirty_days_ago).count()
         # Count upcoming events
@@ -2221,38 +2221,55 @@ from datetime import datetime
 from .models import CustomUser
 
 def map_and_save_users(csv_path):
-    # Load CSV data
-    data = pd.read_csv(csv_path)
-
+    # Load CSV data with proper handling of mixed types
+    data = pd.read_csv(csv_path, low_memory=False)
+    
     for _, row in data.iterrows():
         try:
-            dob_str = str(row.get("Date of Birth")).strip()
+            # Safely extract email and handle non-string values
+            email_val = row.get("email_id")
+            email = str(email_val).strip() if pd.notna(email_val) else ""
+
+            # Skip if email is missing or already exists in CustomUser
+            if not email or email.lower() == "nan" or CustomUser.objects.filter(email=email).exists():
+                print(f"❌ Skipped user due to missing or existing email: {email}")
+                continue
+
+            # Safely extract DOB and handle non-string values
+            dob_val = row.get("Date of Birth")
+            dob_str = str(dob_val).strip() if pd.notna(dob_val) else ""
 
             # Skip if DOB is missing or invalid
             if not dob_str or dob_str.lower() in ["nan", "null"]:
-                print(f"❌ Skipped user due to missing DOB: {row.get('email_id')}")
+                print(f"❌ Skipped user due to missing DOB: {email}")
                 continue
 
             # Parse DOB (auto-detect format)
-            dob = pd.to_datetime(dob_str, errors='raise', dayfirst=False)
+            dob = pd.to_datetime(dob_str, errors='coerce', dayfirst=False)
+            if pd.isna(dob):
+                print(f"❌ Skipped user due to invalid DOB format: {email} - {dob_str}")
+                continue
+                
             password = dob.strftime("%d%m%Y")  # Convert to DDMMYYYY
 
-            # Clean and prepare fields
-            email = row.get("email_id", "").strip()
-            name = row.get("Name", "").strip()
-            salutation = row.get("Salutation", "").strip() if pd.notna(row.get("Salutation")) else None
-            gender = row.get("Gender", "").strip() if pd.notna(row.get("Gender")) else "Nil"
-            course = row.get("course", "").strip()
-            role = row.get("role", "Alumni").strip()
+            # Safely extract and clean other fields
+            def safe_str(val):
+                return str(val).strip() if pd.notna(val) else ""
+
+            name = safe_str(row.get("Name"))
+            salutation = safe_str(row.get("Salutation"))
+            gender = safe_str(row.get("Gender")) or "Nil"
+            course = safe_str(row.get("Course"))
+            role = safe_str(row.get("role")) or "Alumni"
 
             # Build user data
             user_data = {
                 "username": email,
                 "first_name": name,
-                "salutation": salutation,
-                "is_active": True,
-                "is_staff": role.lower() in ["staff", "admin"],
-                "is_superuser": role.lower() == "admin",
+                "salutation": salutation if salutation else None,
+                # "is_active": True,
+                # "is_staff": role.lower() in ["staff", "admin"],
+                # "is_superuser": role.lower() == "admin",
                 "gender": gender,
                 "date_of_birth": dob,
                 "course": course,
@@ -2261,8 +2278,8 @@ def map_and_save_users(csv_path):
             }
 
             # Create or update user
-            user, created = CustomUser.objects.update_or_create(
-                username=email,
+            user, created = PendingSignup.objects.update_or_create(
+                email=email,
                 defaults=user_data
             )
 
@@ -2274,10 +2291,12 @@ def map_and_save_users(csv_path):
                 print(f"[UPDATED] {email} | Name: {name}")
 
         except Exception as e:
-            print(f"[ERROR] {row.get('email_id')} | {e}")
+            email_val = row.get("email_id", "unknown")
+            email = str(email_val).strip() if pd.notna(email_val) else "unknown"
+            print(f"[ERROR] {email} | {str(e)}")
 
     print("✅ Data mapping and saving completed.")
 
 # Example usage
-csv_path = "api/registered_users_with_roles.csv"
+csv_path = "api/Members_raw.csv"
 map_and_save_users(csv_path)
