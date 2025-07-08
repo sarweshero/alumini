@@ -2216,85 +2216,85 @@ class EmailSuggestionAPIView(APIView):
         suggestions = User.objects.filter(email__icontains=query).values_list('email', flat=True)[:10]
         return Response({"suggestions": list(suggestions)}, status=200)
 
-import pandas as pd
-from datetime import datetime
-from .models import CustomUser
+# import pandas as pd
+# from datetime import datetime
+# from .models import CustomUser
 
-def map_and_save_users(csv_path):
-    # Load CSV data with proper handling of mixed types
-    data = pd.read_csv(csv_path, low_memory=False)
+# def map_and_save_users(csv_path):
+#     # Load CSV data with proper handling of mixed types
+#     data = pd.read_csv(csv_path, low_memory=False)
     
-    for _, row in data.iterrows():
-        try:
-            # Safely extract email and handle non-string values
-            email_val = row.get("email_id")
-            email = str(email_val).strip() if pd.notna(email_val) else ""
+#     for _, row in data.iterrows():
+#         try:
+#             # Safely extract email and handle non-string values
+#             email_val = row.get("email_id")
+#             email = str(email_val).strip() if pd.notna(email_val) else ""
 
-            # Skip if email is missing or already exists in CustomUser
-            if not email or email.lower() == "nan" or CustomUser.objects.filter(email=email).exists():
-                print(f"❌ Skipped user due to missing or existing email: {email}")
-                continue
+#             # Skip if email is missing or already exists in CustomUser
+#             if not email or email.lower() == "nan" or CustomUser.objects.filter(email=email).exists():
+#                 print(f"❌ Skipped user due to missing or existing email: {email}")
+#                 continue
 
-            # Safely extract DOB and handle non-string values
-            dob_val = row.get("Date of Birth")
-            dob_str = str(dob_val).strip() if pd.notna(dob_val) else ""
+#             # Safely extract DOB and handle non-string values
+#             dob_val = row.get("Date of Birth")
+#             dob_str = str(dob_val).strip() if pd.notna(dob_val) else ""
 
-            # Skip if DOB is missing or invalid
-            if not dob_str or dob_str.lower() in ["nan", "null"]:
-                print(f"❌ Skipped user due to missing DOB: {email}")
-                continue
+#             # Skip if DOB is missing or invalid
+#             if not dob_str or dob_str.lower() in ["nan", "null"]:
+#                 print(f"❌ Skipped user due to missing DOB: {email}")
+#                 continue
 
-            # Parse DOB (auto-detect format)
-            dob = pd.to_datetime(dob_str, errors='coerce', dayfirst=False)
-            if pd.isna(dob):
-                print(f"❌ Skipped user due to invalid DOB format: {email} - {dob_str}")
-                continue
+#             # Parse DOB (auto-detect format)
+#             dob = pd.to_datetime(dob_str, errors='coerce', dayfirst=False)
+#             if pd.isna(dob):
+#                 print(f"❌ Skipped user due to invalid DOB format: {email} - {dob_str}")
+#                 continue
                 
-            password = dob.strftime("%d%m%Y")  # Convert to DDMMYYYY
+#             password = dob.strftime("%d%m%Y")  # Convert to DDMMYYYY
 
-            # Safely extract and clean other fields
-            def safe_str(val):
-                return str(val).strip() if pd.notna(val) else ""
+#             # Safely extract and clean other fields
+#             def safe_str(val):
+#                 return str(val).strip() if pd.notna(val) else ""
 
-            name = safe_str(row.get("Name"))
-            salutation = safe_str(row.get("Salutation"))
-            gender = safe_str(row.get("Gender")) or "Nil"
-            course = safe_str(row.get("Course"))
-            role = safe_str(row.get("role")) or "Alumni"
+#             name = safe_str(row.get("Name"))
+#             salutation = safe_str(row.get("Salutation"))
+#             gender = safe_str(row.get("Gender")) or "Nil"
+#             course = safe_str(row.get("Course"))
+#             role = safe_str(row.get("role")) or "Alumni"
 
-            # Build user data
-            user_data = {
-                "username": email,
-                "first_name": name,
-                "salutation": salutation if salutation else " ",
-                # "is_active": True,
-                # "is_staff": role.lower() in ["staff", "admin"],
-                # "is_superuser": role.lower() == "admin",
-                "gender": gender,
-                "date_of_birth": dob,
-                "course": course,
-                "email": email,
-                "role": role,
-            }
+#             # Build user data
+#             user_data = {
+#                 "username": email,
+#                 "first_name": name,
+#                 "salutation": salutation if salutation else " ",
+#                 # "is_active": True,
+#                 # "is_staff": role.lower() in ["staff", "admin"],
+#                 # "is_superuser": role.lower() == "admin",
+#                 "gender": gender,
+#                 "date_of_birth": dob,
+#                 "course": course,
+#                 "email": email,
+#                 "role": role,
+#             }
 
-            # Create or update user
-            user, created = PendingSignup.objects.update_or_create(
-                email=email,
-                defaults=user_data
-            )
+#             # Create or update user
+#             user, created = PendingSignup.objects.update_or_create(
+#                 email=email,
+#                 defaults=user_data
+#             )
 
-            if created:
-                print(f"[CREATED] {email} | Name: {name}")
-            else:
-                print(f"[UPDATED] {email} | Name: {name}")
+#             if created:
+#                 print(f"[CREATED] {email} | Name: {name}")
+#             else:
+#                 print(f"[UPDATED] {email} | Name: {name}")
 
-        except Exception as e:
-            email_val = row.get("email_id", "unknown")
-            email = str(email_val).strip() if pd.notna(email_val) else "unknown"
-            print(f"[ERROR] {email} | {str(e)}")
+#         except Exception as e:
+#             email_val = row.get("email_id", "unknown")
+#             email = str(email_val).strip() if pd.notna(email_val) else "unknown"
+#             print(f"[ERROR] {email} | {str(e)}")
 
-    print("✅ Data mapping and saving completed.")
+#     print("✅ Data mapping and saving completed.")
 
-# Example usage
-csv_path = "api/Members_raw.csv"
-map_and_save_users(csv_path)
+# # Example usage
+# csv_path = "api/Members_raw.csv"
+# map_and_save_users(csv_path)
