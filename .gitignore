@@ -2,4 +2,5 @@
 /.vscode
 readme
 media
+__pycache__
 # registered_users_with_roles.csv
