@@ -2298,3 +2298,114 @@ class EmailSuggestionAPIView(APIView):
 # # Example usage
 # csv_path = "api/Members_raw.csv"
 # map_and_save_users(csv_path)
+
+import pandas as pd
+from datetime import datetime
+from .models import CustomUser, PendingSignup
+
+def map_and_save_users(csv_path):
+    # Load CSV data with proper handling of mixed types
+    data = pd.read_csv(csv_path, low_memory=False)
+    
+    updated_count = 0
+    skipped_count = 0
+    
+    for _, row in data.iterrows():
+        try:
+            # Safely extract email and handle non-string values
+            email_val = row.get("email_id")
+            email = str(email_val).strip() if pd.notna(email_val) else ""
+
+            # Skip if email is missing
+            if not email or email.lower() == "nan":
+                print(f"❌ Skipped row due to missing email")
+                skipped_count += 1
+                continue
+
+            # Check if user exists in CustomUser table
+            try:
+                user = CustomUser.objects.get(email=email)
+                print(f"✅ Found existing user: {email}")
+            except CustomUser.DoesNotExist:
+                print(f"❌ Skipped - User not found in CustomUser table: {email}")
+                skipped_count += 1
+                continue
+
+            # Safely extract and clean other fields
+            def safe_str(val):
+                return str(val).strip() if pd.notna(val) and str(val).strip().lower() not in ["nan", "null", ""] else ""
+
+            # Extract additional fields from CSV
+            course_start_year = safe_str(row.get("Course Start Year"))
+            phone = safe_str(row.get("Mobile Phone"))
+            current_location = safe_str(row.get("Current Location"))
+            Address = safe_str(row.get("Correspondence Address"))
+            city = safe_str(row.get("Correspondence City"))
+            state = safe_str(row.get("Correspondence State"))
+            country = safe_str(row.get("Correspondence Country"))
+            zip_code = safe_str(row.get("Correspondence Pincode"))
+            company = safe_str(row.get("Company"))
+            first_name = safe_str(row.get("Name"))
+
+        
+            # Update user with new data (only update if field has value)
+            updated_fields = []
+            
+            if course_start_year:
+                user.course_start_year = course_start_year
+                updated_fields.append("course_start_year")
+
+            if phone:
+                user.phone = phone
+                updated_fields.append("phone")
+                
+            if current_location:
+                user.current_location = current_location
+                updated_fields.append("current_location")
+                
+            if Address:
+                user.Address = Address
+                updated_fields.append("Address")
+                
+            if city:
+                user.city = city
+                updated_fields.append("city")
+                
+            if state:
+                user.state = state
+                updated_fields.append("state")
+                
+            if country:
+                user.country = country
+                updated_fields.append("country")
+
+            if zip_code:
+                user.zip_code = zip_code
+                updated_fields.append("zip_code")
+
+            if company:
+                user.company = company
+                updated_fields.append("company")
+                
+            if first_name:
+                user.first_name = first_name
+                updated_fields.append("first_name")
+
+            # Save the updated user
+            if updated_fields:
+                user.save(update_fields=updated_fields)
+                print(f"[UPDATED] {email} | Fields updated: {', '.join(updated_fields)}")
+                updated_count += 1
+            else:
+                print(f"[NO CHANGES] {email} | No new data to update")
+
+        except Exception as e:
+            email_val = row.get("email_id", "unknown")
+            email = str(email_val).strip() if pd.notna(email_val) else "unknown"
+            print(f"[ERROR] {email} | {str(e)}")
+            skipped_count += 1
+
+    print(f"✅ Data mapping completed. Updated: {updated_count}, Skipped: {skipped_count}")
+
+csv_path = "api/Members_raw.csv"
+map_and_save_users(csv_path)
