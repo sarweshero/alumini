@@ -188,6 +188,7 @@ class PendingSignup(models.Model):
     approved_at = models.DateTimeField(null=True, blank=True)
     username = models.CharField(max_length=150, unique=True)
     password = models.CharField(max_length=128)
+    is_active = models.BooleanField()
 
     def __str__(self):
         return f"PendingSignup: {self.email}"
