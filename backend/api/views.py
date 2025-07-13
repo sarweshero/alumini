@@ -2240,196 +2240,239 @@ class EmailSuggestionAPIView(APIView):
         suggestions = User.objects.filter(email__icontains=query).values_list('email', flat=True)[:10]
         return Response({"suggestions": list(suggestions)}, status=200)
 
-# import pandas as pd
-# from datetime import datetime
-# from .models import CustomUser
-
-# def map_and_save_users(csv_path):
-#     # Load CSV data with proper handling of mixed types
-#     data = pd.read_csv(csv_path, low_memory=False)
+class ProfileCompletionInsightsView(APIView):
+    """View for providing comprehensive profile completion insights."""
+    permission_classes = [permissions.IsAuthenticated]
     
-#     for _, row in data.iterrows():
-#         try:
-#             # Safely extract email and handle non-string values
-#             email_val = row.get("email_id")
-#             email = str(email_val).strip() if pd.notna(email_val) else ""
-
-#             # Skip if email is missing or already exists in CustomUser
-#             if not email or email.lower() == "nan" or CustomUser.objects.filter(email=email).exists():
-#                 print(f"❌ Skipped user due to missing or existing email: {email}")
-#                 continue
-
-#             # Safely extract DOB and handle non-string values
-#             dob_val = row.get("Date of Birth")
-#             dob_str = str(dob_val).strip() if pd.notna(dob_val) else ""
-
-#             # Skip if DOB is missing or invalid
-#             if not dob_str or dob_str.lower() in ["nan", "null"]:
-#                 print(f"❌ Skipped user due to missing DOB: {email}")
-#                 continue
-
-#             # Parse DOB (auto-detect format)
-#             dob = pd.to_datetime(dob_str, errors='coerce', dayfirst=False)
-#             if pd.isna(dob):
-#                 print(f"❌ Skipped user due to invalid DOB format: {email} - {dob_str}")
-#                 continue
-                
-#             password = dob.strftime("%d%m%Y")  # Convert to DDMMYYYY
-
-#             # Safely extract and clean other fields
-#             def safe_str(val):
-#                 return str(val).strip() if pd.notna(val) else ""
-
-#             name = safe_str(row.get("Name"))
-#             salutation = safe_str(row.get("Salutation"))
-#             gender = safe_str(row.get("Gender")) or "Nil"
-#             course = safe_str(row.get("Course"))
-#             role = safe_str(row.get("role")) or "Alumni"
-
-#             # Build user data
-#             user_data = {
-#                 "username": email,
-#                 "first_name": name,
-#                 "salutation": salutation if salutation else " ",
-#                 # "is_active": True,
-#                 # "is_staff": role.lower() in ["staff", "admin"],
-#                 # "is_superuser": role.lower() == "admin",
-#                 "gender": gender,
-#                 "date_of_birth": dob,
-#                 "course": course,
-#                 "email": email,
-#                 "role": role,
-#             }
-
-#             # Create or update user
-#             user, created = PendingSignup.objects.update_or_create(
-#                 email=email,
-#                 defaults=user_data
-#             )
-
-#             if created:
-#                 print(f"[CREATED] {email} | Name: {name}")
-#             else:
-#                 print(f"[UPDATED] {email} | Name: {name}")
-
-#         except Exception as e:
-#             email_val = row.get("email_id", "unknown")
-#             email = str(email_val).strip() if pd.notna(email_val) else "unknown"
-#             print(f"[ERROR] {email} | {str(e)}")
-
-#     print("✅ Data mapping and saving completed.")
-
-# # Example usage
-# csv_path = "api/Members_raw.csv"
-# map_and_save_users(csv_path)
-
-# import pandas as pd
-# from datetime import datetime
-# from .models import CustomUser, PendingSignup
-
-# def map_and_save_users(csv_path):
-#     # Load CSV data with proper handling of mixed types
-#     data = pd.read_csv(csv_path, low_memory=False)
-    
-#     updated_count = 0
-#     skipped_count = 0
-    
-#     for _, row in data.iterrows():
-#         try:
-#             # Safely extract email and handle non-string values
-#             email_val = row.get("email_id")
-#             email = str(email_val).strip() if pd.notna(email_val) else ""
-
-#             # Skip if email is missing
-#             if not email or email.lower() == "nan":
-#                 print(f"❌ Skipped row due to missing email")
-#                 skipped_count += 1
-#                 continue
-
-#             # Check if user exists in CustomUser table
-#             try:
-#                 user = CustomUser.objects.get(email=email)
-#                 print(f"✅ Found existing user: {email}")
-#             except CustomUser.DoesNotExist:
-#                 print(f"❌ Skipped - User not found in CustomUser table: {email}")
-#                 skipped_count += 1
-#                 continue
-
-#             # Safely extract and clean other fields
-#             def safe_str(val):
-#                 return str(val).strip() if pd.notna(val) and str(val).strip().lower() not in ["nan", "null", ""] else ""
-
-#             # Extract additional fields from CSV
-#             course_start_year = safe_str(row.get("Course Start Year"))
-#             phone = safe_str(row.get("Mobile Phone"))
-#             current_location = safe_str(row.get("Current Location"))
-#             Address = safe_str(row.get("Correspondence Address"))
-#             city = safe_str(row.get("Correspondence City"))
-#             state = safe_str(row.get("Correspondence State"))
-#             country = safe_str(row.get("Correspondence Country"))
-#             zip_code = safe_str(row.get("Correspondence Pincode"))
-#             company = safe_str(row.get("Company"))
-#             first_name = safe_str(row.get("Name"))
-
+    def get(self, request):
+        """
+        Get detailed profile completion insights for the authenticated user.
         
-#             # Update user with new data (only update if field has value)
-#             updated_fields = []
+        Returns:
+            - Overall completion percentage
+            - Section-wise completion details
+            - Missing fields with suggestions
+            - Completion score breakdown
+            - Recommendations for improvement
+        """
+        user = request.user
+        
+        # Define profile sections with their fields and weights
+        profile_sections = {
+            'basic_info': {
+            'weight': 25,
+            'fields': {
+                'first_name': {'required': True, 'weight': 15},
+                'last_name': {'required': True, 'weight': 15},
+                'email': {'required': True, 'weight': 10},
+                'phone': {'required': True, 'weight': 15},
+                'gender': {'required': False, 'weight': 10},
+                'date_of_birth': {'required': False, 'weight': 15},
+                'bio': {'required': False, 'weight': 10},
+                'profile_photo': {'required': False, 'weight': 10}
+            }
+            },
+            'education': {
+            'weight': 20,
+            'fields': {
+                'college_name': {'required': True, 'weight': 25},
+                'course': {'required': True, 'weight': 20},
+                'passed_out_year': {'required': True, 'weight': 20},
+                'roll_no': {'required': False, 'weight': 10},
+                'course_start_year': {'required': False, 'weight': 5},
+                'course_end_year': {'required': False, 'weight': 5}
+            }
+            },
+            'professional': {
+            'weight': 25,
+            'fields': {
+                'current_work': {'required': True, 'weight': 20},
+                'company': {'required': False, 'weight': 15},
+            }
+            },
+            'contact_location': {
+            'weight': 15,
+            'fields': {
+                'city': {'required': True, 'weight': 25},
+                'state': {'required': True, 'weight': 20},
+                'country': {'required': True, 'weight': 20},
+                'Address': {'required': False, 'weight': 15},
+                'zip_code': {'required': False, 'weight': 10},
+                'current_location': {'required': False, 'weight': 10}
+            }
+            },
+            'social_media': {
+            'weight': 10,
+            'fields': {
+                'linkedin_link': {'required': False, 'weight': 40},
+                'facebook_link': {'required': False, 'weight': 20},
+                'twitter_link': {'required': False, 'weight': 20},
+                'website_link': {'required': False, 'weight': 20}
+            }
+            },
+            'additional': {
+            'weight': 5,
+            'fields': {
+                'chapter': {'required': False, 'weight': 30},
+            }
+            }
+        }
+        
+        # Calculate completion for each section
+        section_insights = {}
+        overall_weighted_score = 0
+        total_possible_score = 0
+        missing_critical_fields = []
+        recommendations = []
+        
+        for section_name, section_data in profile_sections.items():
+            section_weight = section_data['weight']
+            section_fields = section_data['fields']
             
-#             if course_start_year:
-#                 user.course_start_year = course_start_year
-#                 updated_fields.append("course_start_year")
-
-#             if phone:
-#                 user.phone = phone
-#                 updated_fields.append("phone")
+            section_score = 0
+            section_max_score = 0
+            completed_fields = []
+            missing_fields = []
+            missing_required_fields = []
+            
+            for field_name, field_config in section_fields.items():
+                field_weight = field_config['weight']
+                is_required = field_config['required']
+                section_max_score += field_weight
                 
-#             if current_location:
-#                 user.current_location = current_location
-#                 updated_fields.append("current_location")
+                # Get field value
+                field_value = getattr(user, field_name, None)
                 
-#             if Address:
-#                 user.Address = Address
-#                 updated_fields.append("Address")
+                # Check if field is completed
+                is_completed = False
+                if field_value is not None:
+                    if isinstance(field_value, str):
+                        is_completed = bool(field_value.strip())
+                    elif isinstance(field_value, list):
+                        is_completed = bool(field_value)
+                    elif hasattr(field_value, 'url'):  # File fields
+                        is_completed = bool(field_value)
+                    else:
+                        is_completed = bool(field_value)
                 
-#             if city:
-#                 user.city = city
-#                 updated_fields.append("city")
-                
-#             if state:
-#                 user.state = state
-#                 updated_fields.append("state")
-                
-#             if country:
-#                 user.country = country
-#                 updated_fields.append("country")
-
-#             if zip_code:
-#                 user.zip_code = zip_code
-#                 updated_fields.append("zip_code")
-
-#             if company:
-#                 user.company = company
-#                 updated_fields.append("company")
-                
-#             if first_name:
-#                 user.first_name = first_name
-#                 updated_fields.append("first_name")
-
-#             # Save the updated user
-#             if updated_fields:
-#                 user.save(update_fields=updated_fields)
-#                 print(f"[UPDATED] {email} | Fields updated: {', '.join(updated_fields)}")
-#                 updated_count += 1
-#             else:
-#                 print(f"[NO CHANGES] {email} | No new data to update")
-
-#         except Exception as e:
-#             email_val = row.get("email_id", "unknown")
-#             email = str(email_val).strip() if pd.notna(email_val) else "unknown"
-#             print(f"[ERROR] {email} | {str(e)}")
-#             skipped_count += 1
-
-#     print(f"✅ Data mapping completed. Updated: {updated_count}, Skipped: {skipped_count}")
-
-# csv_path = "api/Members_raw.csv"
-# map_and_save_users(csv_path)
+                if is_completed:
+                    section_score += field_weight
+                    completed_fields.append({
+                        'field': field_name,
+                        'weight': field_weight,
+                        'required': is_required
+                    })
+                else:
+                    missing_fields.append({
+                        'field': field_name,
+                        'weight': field_weight,
+                        'required': is_required
+                    })
+                    if is_required:
+                        missing_required_fields.append(field_name)
+                        missing_critical_fields.append({
+                            'field': field_name,
+                            'section': section_name,
+                            'impact': 'high' if field_weight >= 15 else 'medium'
+                        })
+            
+            # Calculate section completion percentage
+            section_completion = (section_score / section_max_score * 100) if section_max_score > 0 else 0
+            
+            # Add to overall weighted score
+            section_weighted_score = (section_completion / 100) * section_weight
+            overall_weighted_score += section_weighted_score
+            total_possible_score += section_weight
+            
+            section_insights[section_name] = {
+                'completion_percentage': round(section_completion, 1),
+                'score': section_score,
+                'max_score': section_max_score,
+                'weight': section_weight,
+                'weighted_score': round(section_weighted_score, 1),
+                'completed_fields': completed_fields,
+                'missing_fields': missing_fields,
+                'missing_required_count': len(missing_required_fields),
+                'status': 'complete' if section_completion == 100 else 'incomplete'
+            }
+        
+        # Calculate overall completion percentage
+        overall_completion = (overall_weighted_score / total_possible_score * 100) if total_possible_score > 0 else 0
+        
+        # Generate recommendations
+        if overall_completion < 50:
+            recommendations.append("Focus on completing basic information and education details first")
+        if section_insights['basic_info']['completion_percentage'] < 80:
+            recommendations.append("Complete your basic profile information to make a better first impression")
+        if section_insights['professional']['completion_percentage'] < 60:
+            recommendations.append("Add your professional experience and skills to showcase your career")
+        if not getattr(user, 'profile_photo', None):
+            recommendations.append("Upload a profile photo to increase profile visibility by 40%")
+        if not getattr(user, 'linkedin_link', None):
+            recommendations.append("Add your LinkedIn profile to enhance professional networking")
+        if section_insights['contact_location']['completion_percentage'] < 70:
+            recommendations.append("Complete your location details to connect with nearby alumni")
+        
+        # Profile strength assessment
+        if overall_completion >= 90:
+            profile_strength = "Excellent"
+            strength_message = "Your profile is comprehensive and will attract great connections!"
+        elif overall_completion >= 75:
+            profile_strength = "Good"
+            strength_message = "Your profile is well-developed. Consider adding more details for better visibility."
+        elif overall_completion >= 50:
+            profile_strength = "Fair"
+            strength_message = "Your profile has good basics. Add more information to stand out."
+        else:
+            profile_strength = "Needs Improvement"
+            strength_message = "Complete your profile to unlock networking opportunities."
+        
+        # Calculate profile completeness level
+        completed_sections = sum(1 for section in section_insights.values() if section['completion_percentage'] == 100)
+        total_sections = len(section_insights)
+        
+        # Activity suggestions based on completion
+        next_steps = []
+        if overall_completion < 100:
+            # Find the section with lowest completion that has required fields
+            lowest_section = min(
+                section_insights.items(),
+                key=lambda x: x[1]['completion_percentage']
+            )
+            next_steps.append(f"Focus on completing your {lowest_section[0].replace('_', ' ').title()} section")
+        
+        if len(missing_critical_fields) > 0:
+            next_steps.append("Fill in required fields to boost your profile score significantly")
+        
+        response_data = {
+            'user_info': {
+                'username': user.username,
+                'name': f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip(),
+                'profile_updated_on': getattr(user, 'profile_updated_on', None)
+            },
+            'overall_completion': {
+                'percentage': round(overall_completion, 1),
+                'strength': profile_strength,
+                'message': strength_message,
+                'completed_sections': completed_sections,
+                'total_sections': total_sections
+            },
+            'section_details': section_insights,
+            'critical_missing': {
+                'count': len(missing_critical_fields),
+                'fields': missing_critical_fields
+            },
+            'recommendations': recommendations,
+            'next_steps': next_steps,
+            'profile_stats': {
+                'total_fields_available': sum(len(section['fields']) for section in profile_sections.values()),
+                'completed_fields': sum(len(section['completed_fields']) for section in section_insights.values()),
+                'missing_required_fields': len(missing_critical_fields),
+                'has_profile_photo': bool(getattr(user, 'profile_photo', None)),
+                'has_cover_photo': bool(getattr(user, 'cover_photo', None)),
+                'social_links_count': sum(1 for link in ['linkedin_link', 'facebook_link', 'twitter_link', 'website_link'] 
+                                        if getattr(user, link, None))
+            }
+        }
+        
+        return Response(response_data, status=status.HTTP_200_OK)

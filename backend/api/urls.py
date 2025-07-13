@@ -16,6 +16,7 @@ urlpatterns = [
     path('reset-password/', ResetPasswordView.as_view(), name='reset_password'),
     path('change-username/', ChangeUsernameView.as_view(), name='change_username'),
     path('profile/', ProfileView.as_view(), name='profile'),
+    path('profile/completion-insights/', ProfileCompletionInsightsView.as_view(), name='profile-completion-insights'),
     path('login-history/', UserLoginHistoryView.as_view(), name='login-history'),
     path('events/<int:pk>', EventDetailView.as_view(), name='events'),
     path('events/', EventView.as_view(), name='events'),
