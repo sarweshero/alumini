@@ -10,11 +10,9 @@ class PendingSignupSerializer(serializers.ModelSerializer):
         model = models.PendingSignup
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
-            'salutation', 'name', 'gender', 'date_of_birth', 'label', 'secondary_email',
+            'salutation', 'gender', 'date_of_birth', 'label', 'secondary_email',
             'roll_no', 'course', 'stream',
             'course_start_year', 'course_end_year', 'current_location', 'home_town', 'company', 'position',
-            # 'start_year', 'end_year', 'facebook_link', 'linkedin_link', 'twitter_link',
-            #'profile_type', 'website_link',  'faculty_job_title', 'faculty_institute', 'faculty_department',
             'work_experience', 'professional_skills', 'industries_worked_in',
             'roles_played', 'chapter', 'college_name', 'role', 'phone', 'Address', 'city',
             'state', 'country', 'zip_code', 'branch', 'social_links', 'profile_photo',
