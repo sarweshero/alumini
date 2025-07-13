@@ -2,9 +2,9 @@
 from . import models
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from . import models
 
 User = get_user_model()    
+
 class PendingSignupSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.PendingSignup
@@ -47,7 +47,7 @@ class LoginLogSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'user_agent', 'timestamp']
 class memberSerializer(serializers.ModelSerializer):
     class Meta:
-        model = models.CustomUser
+        model = User  # Fixed: Changed from models.CustomUser to User
         fields = [
             'username', 'first_name', 'last_name', 'email', 'contact_number', 
             'passed_out_year', 'current_work', 'experience', 'social_links', 
@@ -123,7 +123,7 @@ class AlbumImageSerializer(serializers.ModelSerializer):
         return None
 
 class JobCommentSerializer(serializers.ModelSerializer):
-    user = serializers.SerializerMethodField()  # Changed field to return user details
+    user = serializers.SerializerMethodField()
 
     class Meta:
         model = models.JobComment
@@ -131,7 +131,6 @@ class JobCommentSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'job', 'user']
 
     def get_user(self, obj):
-        # Check if obj.user exists and return user details directly
         if obj.user:
             return {
                 "first_name": obj.user.first_name,
@@ -142,7 +141,7 @@ class JobCommentSerializer(serializers.ModelSerializer):
         return None
 
 class JobsSerializer(serializers.ModelSerializer):
-    user = serializers.SerializerMethodField() # Changed field: return profile info
+    user = serializers.SerializerMethodField()
     images = JobImageSerializer(many=True, read_only=True)
     comments = JobCommentSerializer(many=True, read_only=True)
     total_comments = serializers.SerializerMethodField()
@@ -158,13 +157,15 @@ class JobsSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'posted_on', 'views', 'comments', 'images', 'total_reactions', 'total_comments']
 
     def get_user(self, obj):
-        user = obj.user  # Directly use the custom user instance
-        return {
-            "first_name": user.first_name,
-            "last_name": user.last_name,
-            "username": user.username,
-            "profile_photo": user.profile_photo.url if user.profile_photo else ""
-        }
+        if obj.user:  # Fixed: Added null check
+            user = obj.user
+            return {
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "username": user.username,
+                "profile_photo": user.profile_photo.url if user.profile_photo else ""
+            }
+        return None
 
     def get_total_reactions(self, obj):
         return sum(obj.reaction.values()) if obj.reaction else 0
@@ -172,9 +173,7 @@ class JobsSerializer(serializers.ModelSerializer):
     def get_total_comments(self, obj):
         return obj.comments.count()
 
-
 class UserLocationSerializer(serializers.ModelSerializer):
-
     user_details = serializers.SerializerMethodField()
 
     class Meta:
@@ -223,13 +222,15 @@ class BusinessDirectorySerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'owner', 'owner_details', 'created_at', 'updated_at']
     
     def get_owner_details(self, obj):
-        return {
-            "id": obj.owner.id,
-            "username": obj.owner.username,
-            "first_name": obj.owner.first_name,
-            "last_name": obj.owner.last_name,
-            "profile_photo": obj.owner.profile_photo.url if obj.owner.profile_photo else None,
-        }
+        if obj.owner:  # Fixed: Added null check
+            return {
+                "id": obj.owner.id,
+                "username": obj.owner.username,
+                "first_name": obj.owner.first_name,
+                "last_name": obj.owner.last_name,
+                "profile_photo": obj.owner.profile_photo.url if obj.owner.profile_photo else None,
+            }
+        return None
     
 class NewsImageSerializer(serializers.ModelSerializer):
     class Meta:
@@ -249,10 +250,12 @@ class NewsRoomSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'user', 'published_on', 'updated_on', 'views']
     
     def get_user(self, obj):
-        return {
-            "id": obj.user.id,
-            "username": obj.user.username,
-            "first_name": obj.user.first_name,
-            "last_name": obj.user.last_name,
-            "profile_photo": obj.user.profile_photo.url if obj.user.profile_photo else None,
-        }
+        if obj.user:  # Fixed: Added null check
+            return {
+                "id": obj.user.id,
+                "username": obj.user.username,
+                "first_name": obj.user.first_name,
+                "last_name": obj.user.last_name,
+                "profile_photo": obj.user.profile_photo.url if obj.user.profile_photo else None,
+            }
+        return None
