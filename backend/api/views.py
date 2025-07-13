@@ -536,16 +536,31 @@ class SignupView(APIView):
             {"message": "Signup request submitted. Await admin approval."},
             status=status.HTTP_200_OK
         )
+    
+class PendingSignupPagination(PageNumberPagination):
+    page_size = 30
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 class ApproveSignupView(APIView):
     """View for listing and approving pending signup requests."""
     
     def get(self, request):
-        """List all pending signup requests."""
-        pending = PendingSignup.objects.filter(is_approved=False)
+        """List all pending signup requests with pagination."""
+        pending = PendingSignup.objects.filter(is_approved=False).order_by('-created_at')
+        
+        # Apply pagination
+        paginator = PendingSignupPagination()
+        paginated_pending = paginator.paginate_queryset(pending, request)
+        
+        if paginated_pending is not None:
+            serializer = PendingSignupSerializer(paginated_pending, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        # Fallback without pagination
         serializer = PendingSignupSerializer(pending, many=True)
         return Response(serializer.data)
-    
+
     def post(self, request, format=None):
         """
         Approve a pending signup request and create a user account.
