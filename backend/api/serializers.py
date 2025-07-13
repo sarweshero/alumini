@@ -77,9 +77,23 @@ class JobImageSerializer(serializers.ModelSerializer):
         fields = ['id', 'image']
 
 class AlbumSerializer(serializers.ModelSerializer):
+    user = serializers.SerializerMethodField()
+    
     class Meta:
         model = models.Album
-        fields = ['id', 'title', 'description', 'cover_image', 'posted_on']
+        fields = ['id', 'title', 'description', 'cover_image', 'posted_on', 'user']
+        read_only_fields = ['id', 'posted_on', 'user']
+    
+    def get_user(self, obj):
+        if obj.user:
+            return {
+                "id": obj.user.id,
+                "username": obj.user.username,
+                "first_name": obj.user.first_name,
+                "last_name": obj.user.last_name,
+                "profile_photo": obj.user.profile_photo.url if obj.user.profile_photo else None,
+            }
+        return None
 
 class AlbumImageSerializer(serializers.ModelSerializer):
     class Meta:
