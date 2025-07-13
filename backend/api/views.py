@@ -547,7 +547,7 @@ class ApproveSignupView(APIView):
     
     def get(self, request):
         """List all pending signup requests with pagination."""
-        pending = PendingSignup.objects.filter(is_approved=False).order_by('created_at')
+        pending = PendingSignup.objects.filter(is_approved=False).order_by('-created_at')
         
         # Apply pagination
         paginator = PendingSignupPagination()
