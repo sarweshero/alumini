@@ -91,14 +91,25 @@ class AlbumSerializer(serializers.ModelSerializer):
                 "username": obj.user.username,
                 "first_name": obj.user.first_name,
                 "last_name": obj.user.last_name,
-                "profile_photo": obj.user.profile_photo.url if obj.user.profile_photo else None,
             }
         return None
 
 class AlbumImageSerializer(serializers.ModelSerializer):
+    user = serializers.SerializerMethodField()
+
     class Meta:
         model = models.AlbumImage
-        fields = ['id', 'image', 'album']
+        fields = ['id', 'image', 'album', 'user']
+
+    def get_user(self, obj):
+        if obj.album and obj.album.user:
+            return {
+                "id": obj.album.user.id,
+                "username": obj.album.user.username,
+                "first_name": obj.album.user.first_name,
+                "last_name": obj.album.user.last_name,
+            }
+        return None
 
 class JobCommentSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()  # Changed field to return user details
