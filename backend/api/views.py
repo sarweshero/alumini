@@ -1519,11 +1519,15 @@ class MyPostsView(APIView):
         # Get user's events
         events = Events.objects.filter(user=request.user).order_by('-uploaded_on')
         events_serializer = EventSerializer(events, many=True)
+
+        news = NewsRoom.objects.filter(user=request.user).order_by('-published_on')
+        news_serializer = NewsRoomSerializer(news, many=True)
         
         # Return combined data
         return Response({
             "jobs": jobs_serializer.data,
-            "events": events_serializer.data
+            "events": events_serializer.data,
+            "news": news_serializer.data,
         }, status=status.HTTP_200_OK)
 
 
@@ -1728,50 +1732,55 @@ class BusinessDirectoryListCreateView(APIView):
         serializer = BusinessDirectorySerializer(businesses, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
-    def post(self, request):
-        """
-        Create a new business listing with optional images and logo.
+def post(self, request):
+    """
+    Create a new business listing with optional images and logo.
+    
+    Returns:
+        The created business data
+    """
+    business_data = request.data.dict() if hasattr(request.data, 'dict') else request.data
+    
+    # Handle logo if provided
+    logo = request.FILES.get('logo')
+    if logo:
+        business_data['logo'] = logo
         
-        Returns:
-            The created business data
-        """
-        business_data = request.data.dict() if hasattr(request.data, 'dict') else request.data
-        
-        # Handle logo if provided
-        logo = request.FILES.get('logo')
-        if logo:
-            business_data['logo'] = logo
-            
-        # Convert JSON string fields to Python objects
-        for json_field in ['social_media', 'keywords']:
-            if json_field in business_data and isinstance(business_data[json_field], str):
-                try:
-                    business_data[json_field] = json.loads(business_data[json_field])
-                except json.JSONDecodeError:
-                    return Response(
-                        {"error": f"Invalid JSON format for {json_field}"}, 
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-        
-        # Create business
-        serializer = BusinessDirectorySerializer(data=business_data)
-        if serializer.is_valid():
-            business = serializer.save(owner=request.user)
-            
-            # Handle multiple images if provided
-            images = request.FILES.getlist('images')
-            for img in images:
-                BusinessImage.objects.create(
-                    business=business, 
-                    image=img, 
-                    caption=request.data.get('caption', '')
+    # Convert JSON string fields to Python objects
+    for json_field in ['social_media', 'keywords']:
+        if json_field in business_data and isinstance(business_data[json_field], str):
+            try:
+                business_data[json_field] = json.loads(business_data[json_field])
+            except json.JSONDecodeError:
+                return Response(
+                    {"error": f"Invalid JSON format for {json_field}"}, 
+                    status=status.HTTP_400_BAD_REQUEST
                 )
-            
-            # Re-serialize with images included
-            updated_serializer = BusinessDirectorySerializer(business)
-            return Response(updated_serializer.data, status=status.HTTP_201_CREATED)
-            
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Create business
+    serializer = BusinessDirectorySerializer(data=business_data)
+    if serializer.is_valid():
+        business = serializer.save(owner=request.user)
+        
+        # Mark user as entrepreneur when they create a business listing, except for admins
+        if not request.user.is_entrepreneur and not request.user.is_superuser:
+            request.user.is_entrepreneur = True
+            request.user.save(update_fields=['is_entrepreneur'])
+        
+        # Handle multiple images if provided
+        images = request.FILES.getlist('images')
+        for img in images:
+            BusinessImage.objects.create(
+                business=business, 
+                image=img, 
+                caption=request.data.get('caption', '')
+            )
+        
+        # Re-serialize with images included
+        updated_serializer = BusinessDirectorySerializer(business)
+        return Response(updated_serializer.data, status=status.HTTP_201_CREATED)
+        
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class BusinessDirectoryDetailView(APIView):
