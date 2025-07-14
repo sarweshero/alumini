@@ -851,7 +851,7 @@ class AlumniAdminFilter(django_filters.FilterSet):
             'date_of_birth', 'current_work', 'college_name', 'chapter',
             'phone',  # REMOVE 'address' if not a model field!, 'chapter', 'salutation',
             'city', 'state', 'country', 'zip_code', 'role',
-            'course_end_year', 'company', 'position', 'course', 'passed_out_year',
+            'course_end_year', 'company', 'position', 'course', 'passed_out_year', 'current_location',
             # 'is_staff', 'is_active', 'is_superuser', 'chapter'
         ]
 
