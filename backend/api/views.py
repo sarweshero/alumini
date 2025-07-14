@@ -878,7 +878,7 @@ class AlumniAdminFilterView(ListAPIView):
         # 'roles_played', 'Worked_in', 'college_name', 'phone', 'Address', 'city'
     ]
     ordering_fields = '__all__'
-    ordering = ['first_name', 'last_name', 'username', 'college_name']
+    ordering = ['first_name', 'last_name']
 
     def get_queryset(self):
         queryset = super().get_queryset()
