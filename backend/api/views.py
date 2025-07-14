@@ -843,28 +843,42 @@ class AlumniPagination(PageNumberPagination):
 class AlumniAdminFilter(django_filters.FilterSet):
     roles_played = django_filters.CharFilter(method='filter_roles_played')
     Worked_in = django_filters.CharFilter(method='filter_Worked_in')
+    status = django_filters.ChoiceFilter(
+        field_name='is_active',
+        choices=[
+            ('active', 'Active'),
+            ('inactive', 'Inactive'),
+        ],
+        method='filter_status'
+    )
 
     class Meta:
         model = User
         fields = [
             'username', 'email', 'first_name', 'last_name', 'gender',
             'date_of_birth', 'current_work', 'college_name', 'chapter',
-            'phone',  # REMOVE 'address' if not a model field!, 'chapter', 'salutation',
-            'city', 'state', 'country', 'zip_code', 'role',
-            'course_end_year', 'company', 'position', 'course', 'passed_out_year', 'current_location',
-            # 'is_staff', 'is_active', 'is_superuser', 'chapter'
+            'phone', 'city', 'state', 'country', 'zip_code', 'role',
+            'course_end_year', 'company', 'position', 'course', 'passed_out_year', 
+            'current_location', 'is_active', 'is_staff', 'status'
         ]
 
-    def filter_roles_played(self, queryset, value):
+    def filter_roles_played(self, queryset, name, value):
         return queryset.filter(Q(roles_played__startswith=value) | Q(roles_played__icontains=value))
 
-    def filter_Worked_in(self, queryset, value):
+    def filter_Worked_in(self, queryset, name, value):
         return queryset.filter(Q(Worked_in__startswith=value) | Q(Worked_in__icontains=value))
 
+    def filter_status(self, queryset, name, value):
+        if value == 'active':
+            return queryset.filter(is_active=True)
+        elif value == 'inactive':
+            return queryset.filter(is_active=False)
+        return queryset
+    
 class AlumniAdminFilterView(ListAPIView):
     """
-    Admin view for filtering alumni in all possible ways.
-    Supports filtering, search, ordering, and pagination.
+    Enhanced admin view for filtering alumni with user management capabilities.
+    Supports filtering, search, ordering, pagination, and user status management.
     """
     queryset = User.objects.all()
     serializer_class = UserSerializer
@@ -874,8 +888,7 @@ class AlumniAdminFilterView(ListAPIView):
     filterset_class = AlumniAdminFilter
 
     search_fields = [
-        'username', 'first_name', 'last_name' #, 'current_work',
-        # 'roles_played', 'Worked_in', 'college_name', 'phone', 'Address', 'city'
+        'username', 'first_name', 'last_name'
     ]
     ordering_fields = '__all__'
     ordering = ['first_name', 'last_name']
@@ -884,14 +897,352 @@ class AlumniAdminFilterView(ListAPIView):
         queryset = super().get_queryset()
         queryset = queryset.exclude(id=self.request.user.id)
 
+        # Filter by approval status
+        status_filter = self.request.query_params.get('status', None)
+        if status_filter:
+            if status_filter.lower() == 'active':
+                queryset = queryset.filter(is_active=True)
+            elif status_filter.lower() == 'inactive':
+                queryset = queryset.filter(is_active=False)
+
         # Exact match for search query
         search_query = self.request.query_params.get('search', None)
         if search_query:
             queryset = queryset.filter(
-            Q(first_name__icontains=search_query) | Q(last_name__icontains=search_query)
+                Q(first_name__icontains=search_query) | 
+                Q(last_name__icontains=search_query) |
+                Q(email__icontains=search_query) |
+                Q(username__icontains=search_query)
             )
 
         return queryset
+
+    def list(self, request, *args, **kwargs):
+        """Enhanced list method that includes user status information."""
+        # Check if user has admin/staff permissions
+        if not (request.user.is_superuser or request.user.role in ["Admin", "Staff"]):
+            return Response(
+                {"error": "Permission denied. Admin or Staff access required."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Get the queryset and paginate
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        
+        if page is not None:
+            # Enhanced serialization with status information
+            users_data = []
+            for user in page:
+                user_data = UserSerializer(user).data
+                # Add status information
+                user_data.update({
+                    'approval_status': {
+                        'is_active': user.is_active,
+                        'is_staff': user.is_staff,
+                        'is_superuser': user.is_superuser,
+                        'status_display': 'Active' if user.is_active else 'Inactive',
+                        'account_type': self._get_account_type(user),
+                        'last_login': user.last_login,
+                        'date_joined': user.date_joined
+                    },
+                    'management_actions': {
+                        'can_deactivate': self._can_manage_user(request.user, user),
+                        'can_delete': self._can_delete_user(request.user, user),
+                        'can_reactivate': self._can_manage_user(request.user, user) and not user.is_active
+                    }
+                })
+                users_data.append(user_data)
+            
+            return self.get_paginated_response(users_data)
+
+        # Fallback without pagination
+        users_data = []
+        for user in queryset:
+            user_data = UserSerializer(user).data
+            user_data.update({
+                'approval_status': {
+                    'is_active': user.is_active,
+                    'is_staff': user.is_staff,
+                    'is_superuser': user.is_superuser,
+                    'status_display': 'Active' if user.is_active else 'Inactive',
+                    'account_type': self._get_account_type(user),
+                    'last_login': user.last_login,
+                    'date_joined': user.date_joined
+                },
+                'management_actions': {
+                    'can_deactivate': self._can_manage_user(request.user, user),
+                    'can_delete': self._can_delete_user(request.user, user),
+                    'can_reactivate': self._can_manage_user(request.user, user) and not user.is_active
+                }
+            })
+            users_data.append(user_data)
+        
+        return Response(users_data)
+
+    def _get_account_type(self, user):
+        """Determine the account type based on user attributes."""
+        if user.is_superuser:
+            return 'Super Admin'
+        elif user.is_staff:
+            return 'Staff'
+        elif user.role:
+            return user.role
+        else:
+            return 'Alumni'
+
+    def _can_manage_user(self, requesting_user, target_user):
+        """Check if the requesting user can manage the target user."""
+        # Superusers can manage anyone except other superusers
+        if requesting_user.is_superuser:
+            return not target_user.is_superuser or requesting_user.id == target_user.id
+        
+        # Staff/Admin can manage regular users but not staff/admin/superusers
+        if requesting_user.role in ["Admin", "Staff"]:
+            return not (target_user.is_staff or target_user.is_superuser or target_user.role in ["Admin", "Staff"])
+        
+        return False
+
+    def _can_delete_user(self, requesting_user, target_user):
+        """Check if the requesting user can delete the target user."""
+        # Only superusers can delete users, and they cannot delete other superusers
+        if requesting_user.is_superuser:
+            return not target_user.is_superuser
+        
+        return False
+
+    def post(self, request, *args, **kwargs):
+        """Handle user management actions (deactivate, reactivate)."""
+        action = request.data.get('action')
+        user_ids = request.data.get('user_ids', [])
+        user_id = request.data.get('user_id')
+        reason = request.data.get('reason', 'Action performed by administrator')
+        notify_user = request.data.get('notify_user', True)
+
+        # Check permissions
+        if not (request.user.is_superuser or request.user.role in ["Admin", "Staff"]):
+            return Response(
+                {"error": "Permission denied. Admin or Staff access required."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Handle single user action
+        if user_id:
+            user_ids = [user_id]
+
+        if not user_ids:
+            return Response(
+                {"error": "user_id or user_ids required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        valid_actions = ['deactivate', 'activate', 'delete']
+        if action not in valid_actions:
+            return Response(
+                {"error": f"Invalid action. Must be one of: {', '.join(valid_actions)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        successful_operations = []
+        failed_operations = []
+
+        for uid in user_ids:
+            try:
+                target_user = User.objects.get(id=uid)
+                
+                # Permission checks
+                if action == 'delete':
+                    if not self._can_delete_user(request.user, target_user):
+                        failed_operations.append({
+                            'user_id': uid,
+                            'error': 'Permission denied to delete this user'
+                        })
+                        continue
+                else:
+                    if not self._can_manage_user(request.user, target_user):
+                        failed_operations.append({
+                            'user_id': uid,
+                            'error': 'Permission denied to manage this user'
+                        })
+                        continue
+
+                # Prevent self-modification
+                if target_user.id == request.user.id:
+                    failed_operations.append({
+                        'user_id': uid,
+                        'error': 'Cannot perform action on your own account'
+                    })
+                    continue
+
+                # Perform the action
+                if action == 'delete':
+                    # Store user info before deletion
+                    user_info = {
+                        'user_id': target_user.id,
+                        'username': target_user.username,
+                        'email': target_user.email,
+                        'name': f"{target_user.first_name} {target_user.last_name}".strip()
+                    }
+                    
+                    # Send notification before deletion if requested
+                    if notify_user and target_user.email:
+                        try:
+                            send_mail(
+                                'Account Deletion Notice',
+                                f'''Dear {target_user.first_name or target_user.username},
+
+Your account has been permanently deleted by the administrator.
+
+Reason: {reason}
+
+If you believe this is an error, please contact the administrator immediately.
+
+Best regards,
+Alumni Portal Team''',
+                                settings.EMAIL_HOST_USER,
+                                [target_user.email],
+                                fail_silently=True,
+                            )
+                        except Exception:
+                            pass
+                    
+                    # Delete the user
+                    target_user.delete()
+                    
+                    successful_operations.append({
+                        **user_info,
+                        'action': 'deleted',
+                        'timestamp': timezone.now().isoformat()
+                    })
+
+                elif action == 'deactivate':
+                    if not target_user.is_active:
+                        failed_operations.append({
+                            'user_id': uid,
+                            'error': 'User is already inactive'
+                        })
+                        continue
+
+                    target_user.is_active = False
+                    target_user.save(update_fields=['is_active'])
+
+                    # Delete auth token to force logout
+                    try:
+                        target_user.auth_token.delete()
+                    except:
+                        pass
+
+                    # Send notification
+                    if notify_user and target_user.email:
+                        try:
+                            send_mail(
+                                'Account Deactivated',
+                                f'''Dear {target_user.first_name or target_user.username},
+
+Your account has been deactivated by the administrator.
+
+Reason: {reason}
+
+If you believe this is an error, please contact the administrator.
+
+Best regards,
+Alumni Portal Team''',
+                                settings.EMAIL_HOST_USER,
+                                [target_user.email],
+                                fail_silently=True,
+                            )
+                        except Exception:
+                            pass
+
+                    successful_operations.append({
+                        'user_id': target_user.id,
+                        'username': target_user.username,
+                        'email': target_user.email,
+                        'name': f"{target_user.first_name} {target_user.last_name}".strip(),
+                        'action': 'deactivated',
+                        'previous_status': True,
+                        'new_status': False,
+                        'timestamp': timezone.now().isoformat()
+                    })
+
+                elif action == 'activate':
+                    if target_user.is_active:
+                        failed_operations.append({
+                            'user_id': uid,
+                            'error': 'User is already active'
+                        })
+                        continue
+
+                    target_user.is_active = True
+                    target_user.save(update_fields=['is_active'])
+
+                    # Send notification
+                    if notify_user and target_user.email:
+                        try:
+                            send_mail(
+                                'Account Reactivated',
+                                f'''Dear {target_user.first_name or target_user.username},
+
+Your account has been reactivated by the administrator.
+
+You can now log in and access all features of the Alumni Portal.
+
+Best regards,
+Alumni Portal Team''',
+                                settings.EMAIL_HOST_USER,
+                                [target_user.email],
+                                fail_silently=True,
+                            )
+                        except Exception:
+                            pass
+
+                    successful_operations.append({
+                        'user_id': target_user.id,
+                        'username': target_user.username,
+                        'email': target_user.email,
+                        'name': f"{target_user.first_name} {target_user.last_name}".strip(),
+                        'action': 'activated',
+                        'previous_status': False,
+                        'new_status': True,
+                        'timestamp': timezone.now().isoformat()
+                    })
+
+            except User.DoesNotExist:
+                failed_operations.append({
+                    'user_id': uid,
+                    'error': 'User not found'
+                })
+            except Exception as e:
+                failed_operations.append({
+                    'user_id': uid,
+                    'error': str(e)
+                })
+
+        # Log the action
+        try:
+            LoginLog.objects.create(
+                user=request.user,
+                user_agent=request.META.get('HTTP_USER_AGENT', ''),
+                timestamp=timezone.now()
+            )
+        except:
+            pass
+
+        return Response({
+            "message": f"User management operation completed",
+            "action": action,
+            "summary": {
+                "total_requested": len(user_ids),
+                "successful": len(successful_operations),
+                "failed": len(failed_operations)
+            },
+            "successful_operations": successful_operations,
+            "failed_operations": failed_operations,
+            "performed_by": request.user.username,
+            "timestamp": timezone.now().isoformat()
+        }, status=status.HTTP_200_OK)
+
+
 #####################################
 #           EVENT VIEWS             #
 #####################################
