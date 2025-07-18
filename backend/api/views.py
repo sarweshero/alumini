@@ -459,83 +459,90 @@ User = get_user_model()
 class SignupView(APIView):
     """View for user signup with OTP verification."""
 
-    def post(self, request):
-        """
-        Create a pending signup request after OTP verification.
+def post(self, request):
+    """
+    Create a pending signup request after OTP verification.
 
-        Returns:
-            Success message if signup request was submitted
-        """
-        email = request.data.get("email")
-        otp = request.data.get("otp")
-        username = request.data.get("username", email)
+    Returns:
+        Success message if signup request was submitted
+    """
+    email = request.data.get("email")
+    otp = request.data.get("otp")
+    username = request.data.get("username", email)
 
-        # Get all model field names excluding specific ones
-        user_fields = [
-            f.name for f in PendingSignup._meta.fields 
-            if f.name not in ("id", "created_at", "is_approved", "approved_at", "username", "password", "email")
-        ]
+    # Get all model field names excluding specific ones
+    user_fields = [
+        f.name for f in PendingSignup._meta.fields 
+        if f.name not in ("id", "created_at", "is_approved", "approved_at", "username", "password", "email")
+    ]
 
-        # Define required fields for signup
-        required_fields = ["first_name", "college_name", "role", "phone", "password"]
-        missing = [field for field in required_fields if not request.data.get(field)]
+    # Define required fields for signup
+    required_fields = ["first_name", "college_name", "role", "phone", "password"]
+    missing = [field for field in required_fields if not request.data.get(field)]
 
-        # Validate required fields
-        if not email or not otp or missing:
-            error_msg = "Email and OTP required." if not email or not otp else f"Missing fields: {', '.join(missing)}"
-            return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
+    # Validate required fields
+    if not email or not otp or missing:
+        error_msg = "Email and OTP required." if not email or not otp else f"Missing fields: {', '.join(missing)}"
+        return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if email or username already exists
-        if User.objects.filter(email=email).exists() or PendingSignup.objects.filter(email=email).exists():
-            return Response({"error": "Email already taken."}, status=status.HTTP_400_BAD_REQUEST)
+    # Check if email or username already exists
+    if User.objects.filter(email=email).exists() or PendingSignup.objects.filter(email=email).exists():
+        return Response({"error": "Email already taken."}, status=status.HTTP_400_BAD_REQUEST)
 
-        if User.objects.filter(username=username).exists() or PendingSignup.objects.filter(username=username).exists():
-            return Response({"error": "Username already taken."}, status=status.HTTP_400_BAD_REQUEST)
+    if User.objects.filter(username=username).exists() or PendingSignup.objects.filter(username=username).exists():
+        return Response({"error": "Username already taken."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Verify OTP
-        otp_entry = SignupOTP.objects.filter(email=email, code=otp).order_by('-created_at').first()
-        if not otp_entry or (timezone.now() - otp_entry.created_at > timedelta(minutes=30)):
-            if otp_entry:
-                otp_entry.delete()
-            return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
+    # Verify OTP
+    otp_entry = SignupOTP.objects.filter(email=email, code=otp).order_by('-created_at').first()
+    if not otp_entry or (timezone.now() - otp_entry.created_at > timedelta(minutes=30)):
+        if otp_entry:
+            otp_entry.delete()
+        return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Prepare data for pending signup with type-safe conversions
-        pending_data = {}
-        for field in user_fields:
-            value = request.data.get(field, "")
-            model_field = PendingSignup._meta.get_field(field)
+    # Prepare data for pending signup with type-safe conversions
+    pending_data = {}
+    for field in user_fields:
+        value = request.data.get(field, "")
+        model_field = PendingSignup._meta.get_field(field)
 
-            # Handle Integer or Float fields
-            if isinstance(model_field, (models.IntegerField, models.FloatField)):
-                try:
-                    value = int(value) if value not in ("", None) else 0
-                except ValueError:
-                    return Response({"error": f"Invalid value for '{field}'. Must be a number."}, status=400)
+        # Handle boolean fields - convert empty strings to False
+        if isinstance(model_field, models.BooleanField):
+            if value == "":
+                value = False
+            elif isinstance(value, str):
+                value = value.lower() == 'true'
 
-            # Handle Date or DateTime fields
-            elif isinstance(model_field, (models.DateField, models.DateTimeField)):
-                value = value or None  # Django will parse if valid, else error at DB level
+        # Handle Integer or Float fields
+        elif isinstance(model_field, (models.IntegerField, models.FloatField)):
+            try:
+                value = int(value) if value not in ("", None) else 0
+            except ValueError:
+                return Response({"error": f"Invalid value for '{field}'. Must be a number."}, status=400)
 
-            pending_data[field] = value
+        # Handle Date or DateTime fields
+        elif isinstance(model_field, (models.DateField, models.DateTimeField)):
+            value = value or None  # Django will parse if valid, else error at DB level
 
-        # Set extra required fields
-        pending_data['email'] = email
-        pending_data['username'] = username
-        pending_data['password'] = request.data.get("password")
+        pending_data[field] = value
 
-        # Create or update pending signup
-        PendingSignup.objects.update_or_create(
-            email=email,
-            defaults=pending_data
-        )
+    # Set extra required fields
+    pending_data['email'] = email
+    pending_data['username'] = username
+    pending_data['password'] = request.data.get("password")
 
-        # Delete the used OTP
-        otp_entry.delete()
+    # Create or update pending signup
+    PendingSignup.objects.update_or_create(
+        email=email,
+        defaults=pending_data
+    )
 
-        return Response(
-            {"message": "Signup request submitted. Await admin approval."},
-            status=status.HTTP_200_OK
-        )
+    # Delete the used OTP
+    otp_entry.delete()
+
+    return Response(
+        {"message": "Signup request submitted. Await admin approval."},
+        status=status.HTTP_200_OK
+    )
     
 class PendingSignupPagination(PageNumberPagination):
     page_size = 30
