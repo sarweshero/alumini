@@ -527,6 +527,7 @@ class SignupView(APIView):
 
         # Set extra required fields
         pending_data['email'] = email
+        pending_data
         pending_data['username'] = username
         pending_data['password'] = request.data.get("password")
 
@@ -926,13 +927,6 @@ class AlumniAdminFilterView(ListAPIView):
 
     def list(self, request, *args, **kwargs):
         """Enhanced list method that includes user status information."""
-        # Check if user has admin/staff permissions
-        if not (request.user.is_superuser or request.user.role in ["Admin", "Staff"]):
-            return Response(
-                {"error": "Permission denied. Admin or Staff access required."},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         # Get the queryset and paginate
         queryset = self.filter_queryset(self.get_queryset())
         page = self.paginate_queryset(queryset)
