@@ -215,7 +215,7 @@ class Events(models.Model):
     uploaded_by = models.CharField(
         max_length=10,
         choices=[('Student', 'Student'), ('Staff', 'Staff'), ('Admin', 'Admin'), ('Alumni', 'Alumni')],
-        default='Alumni'
+        default='Student'
     )
 
     def __str__(self):
