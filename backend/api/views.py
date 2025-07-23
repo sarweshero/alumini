@@ -1475,8 +1475,8 @@ class AlumniAdminFilterView(ListAPIView):
     ordering = ['first_name', 'last_name']
 
     def get_queryset(self):
-        queryset = super().get_queryset()
-        queryset = queryset.exclude(id=self.request.user.id).order_by('-id')
+        queryset = super().get_queryset().order_by('-id')
+        queryset = queryset.exclude(id=self.request.user.id)
 
         # Filter by approval status
         status_filter = self.request.query_params.get('status', None)
