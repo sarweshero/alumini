@@ -535,6 +535,7 @@ class SignupView(APIView):
         PendingSignup.objects.update_or_create(
             email=email,
             defaults=pending_data
+            is_active=True
         )
 
         # Delete the used OTP
