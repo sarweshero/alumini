@@ -19,30 +19,30 @@ import json
 import random
 import pandas as pd
 import django_filters
+from datetime import datetime, timedelta
 from django.db import models
-from datetime import datetime
-from datetime import timedelta
 from django.http import Http404
 from django.conf import settings
 from django.utils import timezone
 from django.shortcuts import render
 from django.core.cache import cache
 from django.db.models import Q, Count
-from django.core.mail import send_mail
+from django.core.mail import send_mail, EmailMessage
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.contrib.auth import get_user_model, authenticate
+from django.contrib.auth.tokens import default_token_generator
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from django.utils.encoding import force_bytes
 from rest_framework.authtoken.models import Token
-from rest_framework.permissions import IsAdminUser,IsAuthenticated
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework import status, permissions, generics
-from django.contrib.auth import get_user_model, authenticate
 from rest_framework.generics import ListAPIView
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.filters import OrderingFilter, SearchFilter
-from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.parsers import MultiPartParser, FormParser
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from django.contrib.auth.tokens import default_token_generator
+
 from .models import (
     # User-related models
     LoginLog, SignupOTP, PendingSignup, user_location,
@@ -61,6 +61,533 @@ from .serializers import (
 )
 
 User = get_user_model()
+
+# Utility functions
+def process_boolean_field(value):
+    """Convert string values to proper boolean values."""
+    if isinstance(value, str):
+        value = value.strip().lower()
+        if value in ('', 'none', 'null', 'false', '0', 'no'):
+            return False
+        elif value in ('true', '1', 'yes', 'on'):
+            return True
+    return bool(value) if value else False
+
+
+def generate_otp():
+    """Generate a 6-digit OTP."""
+    return str(random.randint(100000, 999999))
+
+
+def send_otp_email(email, otp, purpose="signup"):
+    """Send OTP email with enhanced professional and friendly formatting."""
+    from django.template.loader import render_to_string
+    
+    # Enhanced email content based on purpose
+    if purpose == "signup":
+        subject = "🎓 Welcome to Alumni Portal - Verify Your Account"
+        html_message = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f8f9fa; padding: 20px;">
+            <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                <div style="text-align: center; margin-bottom: 30px;">
+                    <h2 style="color: #2c3e50; margin: 0;">Welcome to Alumni Portal! 🎉</h2>
+                </div>
+                
+                <p style="color: #34495e; font-size: 16px; line-height: 1.6;">
+                    Hello there! 👋
+                </p>
+                
+                <p style="color: #34495e; font-size: 16px; line-height: 1.6;">
+                    We're excited to have you join our alumni community! To complete your registration, 
+                    please use the verification code below:
+                </p>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                    <div style="background-color: #3498db; color: white; font-size: 32px; font-weight: bold; 
+                                padding: 20px; border-radius: 8px; letter-spacing: 8px; display: inline-block;">
+                        {otp}
+                    </div>
+                </div>
+                
+                <div style="background-color: #e8f4fd; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    <p style="color: #2980b9; margin: 0; font-size: 14px;">
+                        ⏰ <strong>Important:</strong> This code will expire in 30 minutes for your security.
+                    </p>
+                </div>
+                
+                <p style="color: #34495e; font-size: 16px; line-height: 1.6;">
+                    If you didn't request this verification, please ignore this email or contact our support team.
+                </p>
+                
+                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ecf0f1;">
+                    <p style="color: #7f8c8d; font-size: 14px; margin: 0;">
+                        Best regards,<br>
+                        <strong style="color: #2c3e50;">The Alumni Portal Team</strong>
+                    </p>
+                </div>
+            </div>
+            
+            <div style="text-align: center; margin-top: 20px;">
+                <p style="color: #7f8c8d; font-size: 12px;">
+                    This is an automated message. Please do not reply to this email.
+                </p>
+            </div>
+        </div>
+        """
+        
+        plain_message = f"""
+        Welcome to Alumni Portal! 🎉
+        
+        Hello there!
+        
+        We're excited to have you join our alumni community! To complete your registration, 
+        please use the verification code below:
+        
+        Your Verification Code: {otp}
+        
+        ⏰ Important: This code will expire in 30 minutes for your security.
+        
+        If you didn't request this verification, please ignore this email or contact our support team.
+        
+        Best regards,
+        The Alumni Portal Team
+        
+        ---
+        This is an automated message. Please do not reply to this email.
+        """
+        
+    elif purpose == "login":
+        subject = "🔐 Alumni Portal - Login Verification Code"
+        html_message = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f8f9fa; padding: 20px;">
+            <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                <div style="text-align: center; margin-bottom: 30px;">
+                    <h2 style="color: #2c3e50; margin: 0;">Login Verification 🔐</h2>
+                </div>
+                
+                <p style="color: #34495e; font-size: 16px; line-height: 1.6;">
+                    Hello! 👋
+                </p>
+                
+                <p style="color: #34495e; font-size: 16px; line-height: 1.6;">
+                    We received a request to sign in to your Alumni Portal account. 
+                    Please use the verification code below to complete your login:
+                </p>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                    <div style="background-color: #27ae60; color: white; font-size: 32px; font-weight: bold; 
+                                padding: 20px; border-radius: 8px; letter-spacing: 8px; display: inline-block;">
+                        {otp}
+                    </div>
+                </div>
+                
+                <div style="background-color: #d5f4e6; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    <p style="color: #27ae60; margin: 0; font-size: 14px;">
+                        ⏰ <strong>Security Note:</strong> This code will expire in 30 minutes.
+                    </p>
+                </div>
+                
+                <p style="color: #34495e; font-size: 16px; line-height: 1.6;">
+                    If this wasn't you, please secure your account immediately and contact our support team.
+                </p>
+                
+                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ecf0f1;">
+                    <p style="color: #7f8c8d; font-size: 14px; margin: 0;">
+                        Stay secure,<br>
+                        <strong style="color: #2c3e50;">The Alumni Portal Team</strong>
+                    </p>
+                </div>
+            </div>
+        </div>
+        """
+        
+        plain_message = f"""
+        Login Verification 🔐
+        
+        Hello!
+        
+        We received a request to sign in to your Alumni Portal account. 
+        Please use the verification code below to complete your login:
+        
+        Your Verification Code: {otp}
+        
+        ⏰ Security Note: This code will expire in 30 minutes.
+        
+        If this wasn't you, please secure your account immediately and contact our support team.
+        
+        Stay secure,
+        The Alumni Portal Team
+        """
+        
+    else:
+        # Generic template for other purposes
+        subject = f"🎓 Alumni Portal - Your {purpose.title()} Code"
+        html_message = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f8f9fa; padding: 20px;">
+            <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                <div style="text-align: center; margin-bottom: 30px;">
+                    <h2 style="color: #2c3e50; margin: 0;">Alumni Portal Verification</h2>
+                </div>
+                
+                <p style="color: #34495e; font-size: 16px; line-height: 1.6;">
+                    Hello! 👋
+                </p>
+                
+                <p style="color: #34495e; font-size: 16px; line-height: 1.6;">
+                    Here's your verification code for {purpose}:
+                </p>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                    <div style="background-color: #9b59b6; color: white; font-size: 32px; font-weight: bold; 
+                                padding: 20px; border-radius: 8px; letter-spacing: 8px; display: inline-block;">
+                        {otp}
+                    </div>
+                </div>
+                
+                <div style="background-color: #f4e8f8; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    <p style="color: #8e44ad; margin: 0; font-size: 14px;">
+                        ⏰ <strong>Note:</strong> This code expires in 30 minutes for security.
+                    </p>
+                </div>
+                
+                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ecf0f1;">
+                    <p style="color: #7f8c8d; font-size: 14px; margin: 0;">
+                        Best regards,<br>
+                        <strong style="color: #2c3e50;">The Alumni Portal Team</strong>
+                    </p>
+                </div>
+            </div>
+        </div>
+        """
+        
+        plain_message = f"""
+        Alumni Portal Verification
+        
+        Hello!
+        
+        Here's your verification code for {purpose}:
+        
+        Your Verification Code: {otp}
+        
+        ⏰ Note: This code expires in 30 minutes for security.
+        
+        Best regards,
+        The Alumni Portal Team
+        """
+    
+    # Send both HTML and plain text versions
+    try:
+        email_message = EmailMessage(
+            subject=subject,
+            body=plain_message,
+            from_email=settings.EMAIL_HOST_USER,
+            to=[email],
+        )
+        email_message.attach_alternative(html_message, "text/html")
+        email_message.send(fail_silently=False)
+    except Exception:
+        # Fallback to simple send_mail if EmailMessage fails
+        send_mail(subject, plain_message, settings.EMAIL_HOST_USER, [email], fail_silently=False)
+
+
+def send_password_reset_email(email, user_name, reset_link):
+    """Send password reset email with enhanced professional formatting."""
+    subject = "🔑 Reset Your Alumni Portal Password"
+    
+    html_message = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f8f9fa; padding: 20px;">
+        <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+            <div style="text-align: center; margin-bottom: 30px;">
+                <h2 style="color: #2c3e50; margin: 0;">Password Reset Request 🔑</h2>
+            </div>
+            
+            <p style="color: #34495e; font-size: 16px; line-height: 1.6;">
+                Hello {user_name}! 👋
+            </p>
+            
+            <p style="color: #34495e; font-size: 16px; line-height: 1.6;">
+                We received a request to reset your Alumni Portal password. Don't worry, it happens to the best of us! 
+                Click the button below to create a new password:
+            </p>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{reset_link}" style="background-color: #e74c3c; color: white; padding: 15px 30px; 
+                   text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+                    🔄 Reset My Password
+                </a>
+            </div>
+            
+            <div style="background-color: #fff5f5; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #e74c3c;">
+                <p style="color: #c0392b; margin: 0; font-size: 14px;">
+                    <strong>🛡️ Security Notice:</strong> This link will expire in 24 hours for your protection.
+                </p>
+            </div>
+            
+            <p style="color: #34495e; font-size: 16px; line-height: 1.6;">
+                If the button doesn't work, you can copy and paste this link into your browser:
+            </p>
+            
+            <div style="background-color: #f8f9fa; padding: 10px; border-radius: 5px; word-break: break-all; font-family: monospace; font-size: 12px; color: #6c757d;">
+                {reset_link}
+            </div>
+            
+            <p style="color: #34495e; font-size: 16px; line-height: 1.6; margin-top: 20px;">
+                <strong>Didn't request this?</strong> No worries! Your password is still secure. 
+                You can safely ignore this email, or contact our support team if you have concerns.
+            </p>
+            
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ecf0f1;">
+                <p style="color: #7f8c8d; font-size: 14px; margin: 0;">
+                    Stay secure,<br>
+                    <strong style="color: #2c3e50;">The Alumni Portal Team</strong>
+                </p>
+            </div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 20px;">
+            <p style="color: #7f8c8d; font-size: 12px;">
+                This is an automated security message. Please do not reply to this email.
+            </p>
+        </div>
+    </div>
+    """
+    
+    plain_message = f"""
+    Password Reset Request 🔑
+    
+    Hello {user_name}!
+    
+    We received a request to reset your Alumni Portal password. Don't worry, it happens to the best of us!
+    
+    Click the link below to create a new password:
+    {reset_link}
+    
+    🛡️ Security Notice: This link will expire in 24 hours for your protection.
+    
+    Didn't request this? No worries! Your password is still secure. 
+    You can safely ignore this email, or contact our support team if you have concerns.
+    
+    Stay secure,
+    The Alumni Portal Team
+    
+    ---
+    This is an automated security message. Please do not reply to this email.
+    """
+    
+    try:
+        email_message = EmailMessage(
+            subject=subject,
+            body=plain_message,
+            from_email=settings.EMAIL_HOST_USER,
+            to=[email],
+        )
+        email_message.attach_alternative(html_message, "text/html")
+        email_message.send(fail_silently=False)
+    except Exception:
+        # Fallback to simple send_mail
+        send_mail(subject, plain_message, settings.EMAIL_HOST_USER, [email], fail_silently=False)
+
+
+def send_approval_notification_email(email, user_name, login_url):
+    """Send account approval notification with welcoming content."""
+    subject = "🎉 Welcome to Alumni Portal - Your Account is Approved!"
+    
+    html_message = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f8f9fa; padding: 20px;">
+        <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+            <div style="text-align: center; margin-bottom: 30px;">
+                <h2 style="color: #27ae60; margin: 0;">🎉 Account Approved! Welcome Aboard! 🎉</h2>
+            </div>
+            
+            <p style="color: #34495e; font-size: 16px; line-height: 1.6;">
+                Dear {user_name}, 👋
+            </p>
+            
+            <p style="color: #34495e; font-size: 16px; line-height: 1.6;">
+                Fantastic news! Your Alumni Portal account has been approved and is now active. 
+                We're thrilled to welcome you to our vibrant alumni community! 🌟
+            </p>
+            
+            <div style="background-color: #d5f4e6; padding: 20px; border-radius: 8px; margin: 25px 0; text-align: center;">
+                <h3 style="color: #27ae60; margin: 0 0 15px 0;">🚀 You can now:</h3>
+                <ul style="color: #2c3e50; text-align: left; margin: 0; padding-left: 20px;">
+                    <li>Connect with fellow alumni worldwide 🌍</li>
+                    <li>Access exclusive job opportunities 💼</li>
+                    <li>Join exciting alumni events 🎪</li>
+                    <li>Share your success stories 📖</li>
+                    <li>Network and grow professionally 📈</li>
+                </ul>
+            </div>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{login_url}" style="background-color: #27ae60; color: white; padding: 15px 30px; 
+                   text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+                    🎯 Start Exploring Now
+                </a>
+            </div>
+            
+            <p style="color: #34495e; font-size: 16px; line-height: 1.6;">
+                <strong>Getting Started Tips:</strong> 📝
+            </p>
+            <ul style="color: #34495e; line-height: 1.8;">
+                <li>Complete your profile to connect with more alumni</li>
+                <li>Update your professional information</li>
+                <li>Browse upcoming events in your area</li>
+                <li>Check out the latest job postings</li>
+            </ul>
+            
+            <p style="color: #34495e; font-size: 16px; line-height: 1.6;">
+                Need help getting started? Our support team is here to assist you every step of the way! 💪
+            </p>
+            
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ecf0f1;">
+                <p style="color: #7f8c8d; font-size: 14px; margin: 0;">
+                    Welcome to the family! 🤗<br>
+                    <strong style="color: #2c3e50;">The Alumni Portal Team</strong>
+                </p>
+            </div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 20px;">
+            <p style="color: #7f8c8d; font-size: 12px;">
+                Ready to reconnect? Log in and start your alumni journey today!
+            </p>
+        </div>
+    </div>
+    """
+    
+    plain_message = f"""
+    🎉 Account Approved! Welcome Aboard! 🎉
+    
+    Dear {user_name},
+    
+    Fantastic news! Your Alumni Portal account has been approved and is now active. 
+    We're thrilled to welcome you to our vibrant alumni community! 🌟
+    
+    🚀 You can now:
+    • Connect with fellow alumni worldwide 🌍
+    • Access exclusive job opportunities 💼
+    • Join exciting alumni events 🎪
+    • Share your success stories 📖
+    • Network and grow professionally 📈
+    
+    Start exploring: {login_url}
+    
+    📝 Getting Started Tips:
+    • Complete your profile to connect with more alumni
+    • Update your professional information
+    • Browse upcoming events in your area
+    • Check out the latest job postings
+    
+    Need help getting started? Our support team is here to assist you every step of the way! 💪
+    
+    Welcome to the family! 🤗
+    The Alumni Portal Team
+    
+    ---
+    Ready to reconnect? Log in and start your alumni journey today!
+    """
+    
+    try:
+        email_message = EmailMessage(
+            subject=subject,
+            body=plain_message,
+            from_email=settings.EMAIL_HOST_USER,
+            to=[email],
+        )
+        email_message.attach_alternative(html_message, "text/html")
+        email_message.send(fail_silently=False)
+    except Exception:
+        send_mail(subject, plain_message, settings.EMAIL_HOST_USER, [email], fail_silently=False)
+
+
+def send_notification_email(email, subject, title, message, call_to_action=None, cta_url=None):
+    """Send general notification email with professional formatting."""
+    html_message = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f8f9fa; padding: 20px;">
+        <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+            <div style="text-align: center; margin-bottom: 30px;">
+                <h2 style="color: #2c3e50; margin: 0;">{title}</h2>
+            </div>
+            
+            <div style="color: #34495e; font-size: 16px; line-height: 1.6;">
+                {message}
+            </div>
+            
+            {f'''
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{cta_url}" style="background-color: #3498db; color: white; padding: 15px 30px; 
+                   text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+                    {call_to_action}
+                </a>
+            </div>
+            ''' if call_to_action and cta_url else ''}
+            
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ecf0f1;">
+                <p style="color: #7f8c8d; font-size: 14px; margin: 0;">
+                    Best regards,<br>
+                    <strong style="color: #2c3e50;">The Alumni Portal Team</strong>
+                </p>
+            </div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 20px;">
+            <p style="color: #7f8c8d; font-size: 12px;">
+                This is an automated message from Alumni Portal.
+            </p>
+        </div>
+    </div>
+    """
+    
+    # Create plain text version
+    plain_message = f"""
+    {title}
+    
+    {message}
+    
+    {f'{call_to_action}: {cta_url}' if call_to_action and cta_url else ''}
+    
+    Best regards,
+    The Alumni Portal Team
+    
+    ---
+    This is an automated message from Alumni Portal.
+    """
+    
+    try:
+        email_message = EmailMessage(
+            subject=subject,
+            body=plain_message,
+            from_email=settings.EMAIL_HOST_USER,
+            to=[email],
+        )
+        email_message.attach_alternative(html_message, "text/html")
+        email_message.send(fail_silently=False)
+    except Exception:
+        send_mail(subject, plain_message, settings.EMAIL_HOST_USER, [email], fail_silently=False)
+
+
+# Base view classes for common functionality
+class BaseAuthenticatedView(APIView):
+    """Base view with authentication requirement."""
+    permission_classes = [permissions.IsAuthenticated]
+
+
+class BaseMultiPartView(BaseAuthenticatedView):
+    """Base view with authentication and multipart parsing."""
+    parser_classes = (MultiPartParser, FormParser)
+
+
+class BaseObjectRetrievalMixin:
+    """Mixin for common object retrieval pattern."""
+    
+    def get_object_or_404(self, model, **kwargs):
+        """Get object or raise 404."""
+        try:
+            return model.objects.get(**kwargs)
+        except model.DoesNotExist:
+            raise Http404
+
 
 #####################################
 # AUTHENTICATION & USER MANAGEMENT  #
@@ -312,16 +839,9 @@ class ForgotPasswordView(APIView):
         token = default_token_generator.make_token(user)
         reset_link = request.build_absolute_uri(f"/api/reset-password/?uid={uid}&token={token}")
         
-        # Send email with reset link
-        subject = "Reset Your Password"
-        message = f"Please click the following link to reset your password:\n{reset_link}"
-        send_mail(
-            subject, 
-            message, 
-            settings.EMAIL_HOST_USER, 
-            [email], 
-            fail_silently=False
-        )
+        # Send enhanced password reset email
+        user_name = user.first_name or user.username
+        send_password_reset_email(email, user_name, reset_link)
         
         return Response(
             {"message": "Password reset link sent to your email."}, 
@@ -409,6 +929,7 @@ class ChangePasswordView(APIView):
 
 class SignupOTPView(APIView):
     """View for sending signup OTP."""
+    permission_classes = [permissions.AllowAny]
     
     def post(self, request, format=None):
         """
@@ -424,18 +945,12 @@ class SignupOTPView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
             
-        # Generate 6-digit OTP
-        code = str(random.randint(100000, 999999))
+        # Generate and save OTP
+        code = generate_otp()
         SignupOTP.objects.create(email=email, code=code)
         
         # Send email with OTP
-        send_mail(
-            'Your Signup OTP',
-            f'Your OTP for signup is {code}. OTP is valid for 5 minutes.',
-            settings.EMAIL_HOST_USER,
-            [email],
-            fail_silently=False,
-        )
+        send_otp_email(email, code, "signup")
         
         return Response(
             {"message": "OTP sent to email."}, 
@@ -443,21 +958,34 @@ class SignupOTPView(APIView):
         )
 
 
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from django.utils import timezone
-from datetime import timedelta
-from django.db import models
-from django.contrib.auth import get_user_model
-
-from api.models import PendingSignup, SignupOTP  # Adjust if your model paths differ
-
-User = get_user_model()
-
-
-class SignupView(APIView):
+class SignupView(BaseAuthenticatedView):
     """View for user signup with OTP verification."""
+    permission_classes = [permissions.AllowAny]  # Override base class
+
+    def _convert_field_value(self, field_name, value, model_field):
+        """Convert field value based on model field type."""
+        # Handle boolean fields - convert empty strings to False
+        if isinstance(model_field, models.BooleanField):
+            if value == "":
+                return False
+            elif isinstance(value, str):
+                return value.lower() in ('true', '1', 'yes', 'on')
+            return bool(value)
+
+        # Handle Integer or Float fields
+        elif isinstance(model_field, (models.IntegerField, models.FloatField)):
+            if value in ("", None):
+                return 0
+            try:
+                return int(value) if isinstance(model_field, models.IntegerField) else float(value)
+            except ValueError:
+                raise ValueError(f"Invalid value for '{field_name}'. Must be a number.")
+
+        # Handle Date or DateTime fields
+        elif isinstance(model_field, (models.DateField, models.DateTimeField)):
+            return value or None
+
+        return value
 
     def post(self, request):
         """
@@ -471,9 +999,10 @@ class SignupView(APIView):
         username = request.data.get("username", email)
 
         # Get all model field names excluding specific ones
+        excluded_fields = ("id", "created_at", "is_approved", "approved_at", "username", "password", "email")
         user_fields = [
             f.name for f in PendingSignup._meta.fields 
-            if f.name not in ("id", "created_at", "is_approved", "approved_at", "username", "password", "email")
+            if f.name not in excluded_fields
         ]
 
         # Define required fields for signup
@@ -504,32 +1033,19 @@ class SignupView(APIView):
         for field in user_fields:
             value = request.data.get(field, "")
             model_field = PendingSignup._meta.get_field(field)
-
-            # Handle boolean fields - convert empty strings to False
-            if isinstance(model_field, models.BooleanField):
-                if value == "":
-                    value = False
-                elif isinstance(value, str):
-                    value = value.lower() == 'true'
-
-            # Handle Integer or Float fields
-            elif isinstance(model_field, (models.IntegerField, models.FloatField)):
-                try:
-                    value = int(value) if value not in ("", None) else 0
-                except ValueError:
-                    return Response({"error": f"Invalid value for '{field}'. Must be a number."}, status=400)
-
-            # Handle Date or DateTime fields
-            elif isinstance(model_field, (models.DateField, models.DateTimeField)):
-                value = value or None  # Django will parse if valid, else error at DB level
-
-            pending_data[field] = value
+            
+            try:
+                pending_data[field] = self._convert_field_value(field, value, model_field)
+            except ValueError as e:
+                return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         # Set extra required fields
-        pending_data['email'] = email
-        pending_data['username'] = username
-        pending_data['password'] = request.data.get("password")
-        pending_data['is_active'] = True
+        pending_data.update({
+            'email': email,
+            'username': username,
+            'password': request.data.get("password"),
+            'is_active': True
+        })
 
         # Create or update pending signup
         PendingSignup.objects.update_or_create(
@@ -626,19 +1142,15 @@ class ApproveSignupView(APIView):
         pending.approved_at = timezone.now()
         pending.save()
         
-        # Notify user via email
-        send_mail(
-            'Your Account Has Been Approved',
-            f'Your account has been approved.\nUsername: {pending.username}',
-            settings.EMAIL_HOST_USER,
-            [pending.email],
-            fail_silently=False,
-        )
+        # Send enhanced approval notification email
+        user_name = user.first_name or user.username
+        login_url = request.build_absolute_uri('/login/')
+        send_approval_notification_email(pending.email, user_name, login_url)
         
         # Clean up pending signup
         pending.delete()
         
-        return Response({"message": "User approved"}, status=status.HTTP_200_OK)
+        return Response({"message": "User approved and notified"}, status=status.HTTP_200_OK)
     
     def delete(self, request, format=None):
         """
@@ -656,14 +1168,75 @@ class ApproveSignupView(APIView):
         except PendingSignup.DoesNotExist:
             return Response({"error": "Pending signup not found"}, status=status.HTTP_404_NOT_FOUND)
             
-        # Notify user via email
-        send_mail(
-            'Signup Request Denied',
-            'Your signup request has been denied by the administrator.',
-            settings.EMAIL_HOST_USER,
-            [pending.email],
-            fail_silently=False,
-        )
+        # Send enhanced denial notification email
+        user_name = pending.first_name or "Dear Applicant"
+        subject = "📋 Alumni Portal - Signup Request Update"
+        
+        html_message = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f8f9fa; padding: 20px;">
+            <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                <div style="text-align: center; margin-bottom: 30px;">
+                    <h2 style="color: #2c3e50; margin: 0;">Alumni Portal Application Update</h2>
+                </div>
+                
+                <p style="color: #34495e; font-size: 16px; line-height: 1.6;">
+                    Hello {user_name}, 👋
+                </p>
+                
+                <p style="color: #34495e; font-size: 16px; line-height: 1.6;">
+                    Thank you for your interest in joining our Alumni Portal community. 
+                    After careful review, we are unable to approve your application at this time.
+                </p>
+                
+                <div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ffc107;">
+                    <p style="color: #856404; margin: 0; font-size: 14px;">
+                        <strong>📝 What's Next?</strong> You may reapply in the future or contact our support team 
+                        if you believe this decision was made in error.
+                    </p>
+                </div>
+                
+                <p style="color: #34495e; font-size: 16px; line-height: 1.6;">
+                    We appreciate your understanding and wish you all the best in your endeavors.
+                </p>
+                
+                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ecf0f1;">
+                    <p style="color: #7f8c8d; font-size: 14px; margin: 0;">
+                        Best regards,<br>
+                        <strong style="color: #2c3e50;">The Alumni Portal Team</strong>
+                    </p>
+                </div>
+            </div>
+        </div>
+        """
+        
+        plain_message = f"""
+        Alumni Portal Application Update
+        
+        Hello {user_name},
+        
+        Thank you for your interest in joining our Alumni Portal community. 
+        After careful review, we are unable to approve your application at this time.
+        
+        📝 What's Next? You may reapply in the future or contact our support team 
+        if you believe this decision was made in error.
+        
+        We appreciate your understanding and wish you all the best in your endeavors.
+        
+        Best regards,
+        The Alumni Portal Team
+        """
+        
+        try:
+            email_message = EmailMessage(
+                subject=subject,
+                body=plain_message,
+                from_email=settings.EMAIL_HOST_USER,
+                to=[pending.email],
+            )
+            email_message.attach_alternative(html_message, "text/html")
+            email_message.send(fail_silently=False)
+        except Exception:
+            send_mail(subject, plain_message, settings.EMAIL_HOST_USER, [pending.email], fail_silently=False)
         
         # Delete pending signup
         pending.delete()
@@ -892,7 +1465,7 @@ class AlumniAdminFilterView(ListAPIView):
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = AlumniPagination
-    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filter_backends = [SearchFilter, OrderingFilter]
     filterset_class = AlumniAdminFilter
 
     search_fields = [
@@ -1088,21 +1661,24 @@ class AlumniAdminFilterView(ListAPIView):
                     # Send notification before deletion if requested
                     if notify_user and target_user.email:
                         try:
-                            send_mail(
-                                'Account Deletion Notice',
-                                f'''Dear {target_user.first_name or target_user.username},
-
-Your account has been permanently deleted by the administrator.
-
-Reason: {reason}
-
-If you believe this is an error, please contact the administrator immediately.
-
-Best regards,
-Alumni Portal Team''',
-                                settings.EMAIL_HOST_USER,
-                                [target_user.email],
-                                fail_silently=True,
+                            user_name = target_user.first_name or target_user.username
+                            send_notification_email(
+                                target_user.email,
+                                "⚠️ Alumni Portal - Account Deletion Notice",
+                                "Account Deletion Notice ⚠️",
+                                f"""
+                                <p>Dear {user_name}, 👋</p>
+                                
+                                <p>We're writing to inform you that your Alumni Portal account has been permanently deleted by our administrator.</p>
+                                
+                                <div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ffc107;">
+                                    <p style="color: #856404; margin: 0;"><strong>Reason:</strong> {reason}</p>
+                                </div>
+                                
+                                <p>If you believe this action was taken in error, please contact our support team immediately. We're here to help resolve any concerns you may have.</p>
+                                
+                                <p>Thank you for being part of our community. We wish you all the best in your future endeavors.</p>
+                                """
                             )
                         except Exception:
                             pass
@@ -1136,21 +1712,24 @@ Alumni Portal Team''',
                     # Send notification
                     if notify_user and target_user.email:
                         try:
-                            send_mail(
-                                'Account Deactivated',
-                                f'''Dear {target_user.first_name or target_user.username},
-
-Your account has been deactivated by the administrator.
-
-Reason: {reason}
-
-If you believe this is an error, please contact the administrator.
-
-Best regards,
-Alumni Portal Team''',
-                                settings.EMAIL_HOST_USER,
-                                [target_user.email],
-                                fail_silently=True,
+                            user_name = target_user.first_name or target_user.username
+                            send_notification_email(
+                                target_user.email,
+                                "🔒 Alumni Portal - Account Deactivated",
+                                "Account Temporarily Deactivated 🔒",
+                                f"""
+                                <p>Dear {user_name}, 👋</p>
+                                
+                                <p>We're writing to inform you that your Alumni Portal account has been temporarily deactivated by our administrator.</p>
+                                
+                                <div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ffc107;">
+                                    <p style="color: #856404; margin: 0;"><strong>Reason:</strong> {reason}</p>
+                                </div>
+                                
+                                <p>Your account access has been suspended, but your data remains safe. If you believe this action was taken in error or would like to discuss reactivation, please contact our support team.</p>
+                                
+                                <p>We appreciate your understanding and look forward to resolving this matter promptly.</p>
+                                """
                             )
                         except Exception:
                             pass
@@ -1180,19 +1759,28 @@ Alumni Portal Team''',
                     # Send notification
                     if notify_user and target_user.email:
                         try:
-                            send_mail(
-                                'Account Reactivated',
-                                f'''Dear {target_user.first_name or target_user.username},
-
-Your account has been reactivated by the administrator.
-
-You can now log in and access all features of the Alumni Portal.
-
-Best regards,
-Alumni Portal Team''',
-                                settings.EMAIL_HOST_USER,
-                                [target_user.email],
-                                fail_silently=True,
+                            user_name = target_user.first_name or target_user.username
+                            login_url = request.build_absolute_uri('/login/')
+                            send_notification_email(
+                                target_user.email,
+                                "✅ Alumni Portal - Account Reactivated",
+                                "Welcome Back! Account Reactivated ✅",
+                                f"""
+                                <p>Dear {user_name}, 👋</p>
+                                
+                                <p>Great news! Your Alumni Portal account has been reactivated by our administrator. Welcome back to our community! 🎉</p>
+                                
+                                <div style="background-color: #d5f4e6; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #27ae60;">
+                                    <p style="color: #27ae60; margin: 0;"><strong>🚀 You can now:</strong></p>
+                                    <p style="color: #2c3e50; margin: 5px 0 0 0;">Access all features of the Alumni Portal and reconnect with your network!</p>
+                                </div>
+                                
+                                <p>You can log in immediately and continue where you left off. Thank you for your patience during the temporary suspension.</p>
+                                
+                                <p>We're excited to have you back in our alumni community! 🌟</p>
+                                """,
+                                "🎯 Login Now",
+                                login_url
                             )
                         except Exception:
                             pass
@@ -1248,9 +1836,8 @@ Alumni Portal Team''',
 #           EVENT VIEWS             #
 #####################################
 
-class EventView(APIView):
+class EventView(BaseMultiPartView):
     """View for listing and creating events."""
-    parser_classes = (MultiPartParser, FormParser)
     permission_classes = [permissions.AllowAny]
     
     def get(self, request):
@@ -1288,17 +1875,12 @@ class EventView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class EventDetailView(APIView):
+class EventDetailView(BaseMultiPartView, BaseObjectRetrievalMixin):
     """View for retrieving, updating, and deleting a specific event."""
-    permission_classes = [permissions.IsAuthenticated]
-    parser_classes = (MultiPartParser, FormParser)
     
     def get_object(self, pk):
         """Get an event by primary key or raise 404."""
-        try:
-            return Events.objects.get(pk=pk)
-        except Events.DoesNotExist:
-            raise Http404
+        return self.get_object_or_404(Events, pk=pk)
             
     def get(self, request, pk):
         """Get a specific event by ID."""
@@ -1353,10 +1935,9 @@ class EventDetailView(APIView):
 #           JOB VIEWS               #
 #####################################
 
-class JobListCreateView(APIView):
+class JobListCreateView(BaseMultiPartView):
     """View for listing and creating jobs."""
     permission_classes = [permissions.AllowAny]
-    parser_classes = (MultiPartParser, FormParser)
     
     def get(self, request):
         """Get all jobs, ordered by post date."""
@@ -1818,79 +2399,76 @@ class HomePageDataView(APIView):
         """
         now = timezone.now()
         today = now.date()
+        thirty_days_ago = now - timedelta(days=30)
         
+        # Use select_related and prefetch_related for optimized queries
         # Upcoming Events
-        upcoming_events = Events.objects.all().order_by('from_date_time')[:3]
+        upcoming_events = Events.objects.select_related('user').all().order_by('from_date_time')[:3]
         events_serializer = EventSerializer(upcoming_events, many=True)
         
-        # Latest Album Images 
-        latest_album_images = Album.objects.all().order_by('-id')[:5]
+        # Latest Album Images with user data
+        latest_album_images = Album.objects.select_related('user').all().order_by('-id')[:5]
         album_images_serializer = AlbumSerializer(latest_album_images, many=True)
         
-        # Latest Members
-        users_with_photos = User.objects.filter(profile_photo__isnull=False).exclude(profile_photo='').order_by('-id')[:3]
-        # latest_members = list(users_with_photos)
+        # Latest Members with photos
+        users_with_photos = User.objects.filter(
+            profile_photo__isnull=False
+        ).exclude(profile_photo='').order_by('-id')[:3]
         members_serializer = UserSerializer(users_with_photos, many=True)
-        batch_mates_serializer = None
-        if request.user.is_authenticated:
+        
         # Batch Mates - Get users from same passed_out_year as current user
-            batch_mates = []
-            if request.user.passed_out_year:
-                batch_mates = User.objects.filter(
-                    passed_out_year=request.user.passed_out_year
-                ).exclude(id=request.user.id).order_by('first_name')[:10]
+        batch_mates_data = []
+        if request.user.is_authenticated and request.user.passed_out_year:
+            batch_mates = User.objects.filter(
+                passed_out_year=request.user.passed_out_year
+            ).exclude(id=request.user.id).order_by('first_name')[:10]
             batch_mates_serializer = UserSerializer(batch_mates, many=True)
+            batch_mates_data = batch_mates_serializer.data
             
-        batch_mates_data = batch_mates_serializer.data if batch_mates_serializer else []
         # Chapters - Get all unique chapters and count of users in each
         chapters = User.objects.exclude(chapter='').values('chapter').annotate(
             member_count=Count('id')
         ).order_by('-member_count')
         
-        # Add featured news
-        featured_news = NewsRoom.objects.all().order_by('-published_on')[:3]
+        # Featured news with user data
+        featured_news = NewsRoom.objects.select_related('user').all().order_by('-published_on')[:3]
         news_serializer = NewsRoomSerializer(featured_news, many=True)
-        total_users = User.objects.count() + PendingSignup.objects.count()
-        thirty_days_ago = timezone.now() - timedelta(days=30)
-        new_users = User.objects.filter(date_joined__gte=thirty_days_ago).count()
-        # Count upcoming events
-        upcoming_events_count = Events.objects.filter(from_date_time__gte=datetime.now()).count()
-        # Count albums
-        albums_count = Album.objects.count()
+        
+        # Statistics - optimized with single queries
+        stats_data = {
+            'total_users': User.objects.count() + PendingSignup.objects.count(),
+            'new_users': User.objects.filter(date_joined__gte=thirty_days_ago).count(),
+            'upcoming_events': Events.objects.filter(from_date_time__gte=now).count(),
+            'albums_count': Album.objects.count(),
+        }
+        
         # Compile and return response
         return Response({
             'upcoming_events': events_serializer.data,
             'latest_album_images': album_images_serializer.data,
             'latest_members': members_serializer.data,
             'batch_mates': batch_mates_data,
-            'chapters': chapters,
+            'chapters': list(chapters),
             'featured_news': news_serializer.data,
-            "total_users": total_users,
-            "new_users": new_users ,
-            "upcoming_events": upcoming_events_count,
-            "albums_count": albums_count,
-            
+            **stats_data,
         }, status=status.HTTP_200_OK)
 
 
-class MyPostsView(APIView):
+class MyPostsView(BaseAuthenticatedView):
     """View for listing the current user's posts."""
-    permission_classes = [permissions.IsAuthenticated]
     
     def get(self, request):
-        """Get all jobs and events created by the authenticated user."""
-        # Get user's jobs
+        """Get all jobs, events, and news created by the authenticated user."""
+        # Use select_related for optimized queries
         jobs = Jobs.objects.filter(user=request.user).order_by('-posted_on')
         jobs_serializer = JobsSerializer(jobs, many=True)
         
-        # Get user's events
         events = Events.objects.filter(user=request.user).order_by('-uploaded_on')
         events_serializer = EventSerializer(events, many=True)
 
         news = NewsRoom.objects.filter(user=request.user).order_by('-published_on')
         news_serializer = NewsRoomSerializer(news, many=True)
         
-        # Return combined data
         return Response({
             "jobs": jobs_serializer.data,
             "events": events_serializer.data,
@@ -1900,6 +2478,16 @@ class MyPostsView(APIView):
 
 class ImportMembersAPIView(APIView):
     """View for importing members from a CSV file."""
+    
+    def _process_boolean_field(self, value):
+        """Convert string values to proper boolean values."""
+        if isinstance(value, str):
+            value = value.strip().lower()
+            if value in ('', 'none', 'null', 'false', '0', 'no'):
+                return False
+            elif value in ('true', '1', 'yes', 'on'):
+                return True
+        return bool(value) if value else False
     
     def post(self, request):
         """
@@ -1911,117 +2499,143 @@ class ImportMembersAPIView(APIView):
         Returns:
             Statistics about the import operation
         """
-        User = get_user_model()
         csv_path = os.path.join(settings.BASE_DIR, 'members.csv')
         created, updated, skipped = [], [], []
         
-        with open(csv_path, newline='', encoding='utf-8') as csvfile:
-            reader = csv.DictReader(csvfile)
-            for row in reader:
-                # Extract core data
-                email = row.get('email_id', '').strip().lower()
-                if not email:
-                    skipped.append("No email in row")
-                    continue
-                
-                username = email
-                dob = row.get('Date of Birth', '').strip()
-                password = dob if dob else 'defaultpassword'
-                
-                # Prepare user data mapping
-                user_data = {
-                    "username": username,
-                    "email": email,
-                    "salutation": row.get('Salutation', '').strip(),
-                    "first_name": row.get('Name', '').strip(),
-                    "gender": row.get('Gender', '').strip(),
-                    "date_of_birth": row.get('Date of Birth', '').strip() or None,
-                    "label": row.get('Label', '').strip(),
-                    "secondary_email": row.get('Secondary Email', '').strip(),
-                    "registered": row.get('Registered', '').strip(),
-                    "registered_on": row.get('Registered On', '').strip(),
-                    "approved_on": row.get('Approved On', '').strip(),
-                    "profile_updated_on": row.get('Profile Updated On', '').strip(),
-                    "profile_type": row.get('Profile Type', '').strip(),
-                    "roll_no": row.get('Roll No', '').strip(),
-                    "institution_name": row.get('Institution Name', '').strip(),
-                    "course": row.get('Course', '').strip(),
-                    "stream": row.get('Stream', '').strip(),
-                    "course_start_year": row.get('Course Start Year', '').strip(),
-                    "course_end_year": row.get('Course End Year', '').strip(),
-                    "employee_id": row.get('Employee ID', '').strip(),
-                    "faculty_job_title": row.get('Faculty: Job Title', '').strip(),
-                    "faculty_institute": row.get('Faculty: Institute', '').strip(),
-                    "faculty_department": row.get('Faculty: Department', '').strip(),
-                    "faculty_start_year": row.get('Faculty: Start Year', '').strip(),
-                    "faculty_start_month": row.get('Faculty: Start Month', '').strip(),
-                    "faculty_end_year": row.get('Faculty: End Year', '').strip(),
-                    "faculty_end_month": row.get('Faculty: End Month', '').strip(),
-                    "mobile_phone_no": row.get('Mobile Phone No.', '').strip(),
-                    "home_phone_no": row.get('Home Phone No.', '').strip(),
-                    "office_phone_no": row.get('Office Phone No.', '').strip(),
-                    "current_location": row.get('Current Location', '').strip(),
-                    "home_town": row.get('Home Town', '').strip(),
-                    "correspondence_address": row.get('Correspondence Address', '').strip(),
-                    "correspondence_city": row.get('Correspondence City', '').strip(),
-                    "correspondence_state": row.get('Correspondence State', '').strip(),
-                    "correspondence_country": row.get('Correspondence Country', '').strip(),
-                    "correspondence_pincode": row.get('Correspondence Pincode', '').strip(),
-                    "company": row.get('Company', '').strip(),
-                    "position": row.get('Position', '').strip(),
-                    "member_roles": row.get('Member Roles', '').strip(),
-                    "educational_course": row.get('Educational Course', '').strip(),
-                    "educational_institute": row.get('Educational Institute', '').strip(),
-                    "start_year": row.get('Start Year', '').strip(),
-                    "end_year": row.get('End Year', '').strip(),
-                    "facebook_link": row.get('Facebook Link', '').strip(),
-                    "linkedin_link": row.get('LinkedIn Link', '').strip(),
-                    "website_link": row.get('Website Link', '').strip(),
-                    "work_experience": float(row.get('Work Experience(in years)', '0').strip() or 0),
-                    "chapter": row.get('chapter', '').strip(),
-                }
-                
-                # Process JSON fields
-                for field, csv_field in [
-                    ('professional_skills', 'Professional Skills'),
-                    ('industries_worked_in', 'Industries Worked In'),
-                    ('roles_played', 'Roles Played')
-                ]:
-                    val = row.get(csv_field, '').strip()
-                    user_data[field] = [v.strip() for v in val.split(',')] if val else []
+        if not os.path.exists(csv_path):
+            return Response(
+                {"error": "CSV file not found"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            with open(csv_path, newline='', encoding='utf-8') as csvfile:
+                reader = csv.DictReader(csvfile)
+                for row_num, row in enumerate(reader, start=2):  # Start at 2 for header
+                    # Extract core data
+                    email = row.get('email_id', '').strip().lower()
+                    if not email:
+                        skipped.append(f"Row {row_num}: No email provided")
+                        continue
+                    
+                    username = email
+                    dob = row.get('Date of Birth', '').strip()
+                    password = dob if dob else 'defaultpassword'
+                    
+                    # Prepare user data mapping
+                    user_data = {
+                        "username": username,
+                        "email": email,
+                        "salutation": row.get('Salutation', '').strip(),
+                        "first_name": row.get('Name', '').strip(),
+                        "gender": row.get('Gender', '').strip(),
+                        "date_of_birth": row.get('Date of Birth', '').strip() or None,
+                        "label": row.get('Label', '').strip(),
+                        "secondary_email": row.get('Secondary Email', '').strip(),
+                        "registered": row.get('Registered', '').strip(),
+                        "registered_on": row.get('Registered On', '').strip(),
+                        "approved_on": row.get('Approved On', '').strip(),
+                        "profile_updated_on": row.get('Profile Updated On', '').strip(),
+                        "profile_type": row.get('Profile Type', '').strip(),
+                        "roll_no": row.get('Roll No', '').strip(),
+                        "institution_name": row.get('Institution Name', '').strip(),
+                        "course": row.get('Course', '').strip(),
+                        "stream": row.get('Stream', '').strip(),
+                        "course_start_year": row.get('Course Start Year', '').strip(),
+                        "course_end_year": row.get('Course End Year', '').strip(),
+                        "employee_id": row.get('Employee ID', '').strip(),
+                        "faculty_job_title": row.get('Faculty: Job Title', '').strip(),
+                        "faculty_institute": row.get('Faculty: Institute', '').strip(),
+                        "faculty_department": row.get('Faculty: Department', '').strip(),
+                        "faculty_start_year": row.get('Faculty: Start Year', '').strip(),
+                        "faculty_start_month": row.get('Faculty: Start Month', '').strip(),
+                        "faculty_end_year": row.get('Faculty: End Year', '').strip(),
+                        "faculty_end_month": row.get('Faculty: End Month', '').strip(),
+                        "mobile_phone_no": row.get('Mobile Phone No.', '').strip(),
+                        "home_phone_no": row.get('Home Phone No.', '').strip(),
+                        "office_phone_no": row.get('Office Phone No.', '').strip(),
+                        "current_location": row.get('Current Location', '').strip(),
+                        "home_town": row.get('Home Town', '').strip(),
+                        "correspondence_address": row.get('Correspondence Address', '').strip(),
+                        "correspondence_city": row.get('Correspondence City', '').strip(),
+                        "correspondence_state": row.get('Correspondence State', '').strip(),
+                        "correspondence_country": row.get('Correspondence Country', '').strip(),
+                        "correspondence_pincode": row.get('Correspondence Pincode', '').strip(),
+                        "company": row.get('Company', '').strip(),
+                        "position": row.get('Position', '').strip(),
+                        "member_roles": row.get('Member Roles', '').strip(),
+                        "educational_course": row.get('Educational Course', '').strip(),
+                        "educational_institute": row.get('Educational Institute', '').strip(),
+                        "start_year": row.get('Start Year', '').strip(),
+                        "end_year": row.get('End Year', '').strip(),
+                        "facebook_link": row.get('Facebook Link', '').strip(),
+                        "linkedin_link": row.get('LinkedIn Link', '').strip(),
+                        "website_link": row.get('Website Link', '').strip(),
+                        "work_experience": float(row.get('Work Experience(in years)', '0').strip() or 0),
+                        "chapter": row.get('chapter', '').strip(),
+                    }
+                    
+                    # Handle boolean fields to prevent ValidationError
+                    boolean_fields = ['is_active', 'is_staff', 'is_superuser', 'is_entrepreneur']
+                    for field in boolean_fields:
+                        csv_value = row.get(field, '')
+                        user_data[field] = self._process_boolean_field(csv_value)
+                    
+                    # Process JSON fields
+                    for field, csv_field in [
+                        ('professional_skills', 'Professional Skills'),
+                        ('industries_worked_in', 'Industries Worked In'),
+                        ('roles_played', 'Roles Played')
+                    ]:
+                        val = row.get(csv_field, '').strip()
+                        user_data[field] = [v.strip() for v in val.split(',')] if val else []
 
-                # Social links as JSON
-                user_data['social_links'] = {
-                    "Facebook": row.get('Facebook Link', '').strip(),
-                    "LinkedIn": row.get('LinkedIn Link', '').strip(),
-                    "Twitter": row.get('Twitter Link', '').strip(),
-                    "Website": row.get('Website Link', '').strip(),
-                }
+                    # Social links as JSON
+                    user_data['social_links'] = {
+                        "Facebook": row.get('Facebook Link', '').strip(),
+                        "LinkedIn": row.get('LinkedIn Link', '').strip(),
+                        "Twitter": row.get('Twitter Link', '').strip(),
+                        "Website": row.get('Website Link', '').strip(),
+                    }
 
-                # Set role and is_staff for faculty
-                profile_type = row.get('Profile Type', '').strip().lower()
-                label = row.get('Label', '').strip().lower()
-                if profile_type == 'faculty' or label == 'faculty':
-                    user_data['role'] = 'Staff'
-                    user_data['is_staff'] = True
+                    # Set role and is_staff for faculty
+                    profile_type = row.get('Profile Type', '').strip().lower()
+                    label = row.get('Label', '').strip().lower()
+                    if profile_type == 'faculty' or label == 'faculty':
+                        user_data['role'] = 'Staff'
+                        user_data['is_staff'] = True
+                    else:
+                        # Ensure is_staff is explicitly set to False if not faculty
+                        user_data.setdefault('is_staff', False)
 
-                try:
-                    # Update existing user
-                    user = User.objects.get(email=email)
-                    for k, v in user_data.items():
-                        setattr(user, k, v)
-                    if password:
+                    try:
+                        # Update existing user
+                        user = User.objects.get(email=email)
+                        for k, v in user_data.items():
+                            setattr(user, k, v)
+                        if password:
+                            user.set_password(password)
+                        user.save()
+                        updated.append(email)
+                    except User.DoesNotExist:
+                        # Create new user with proper boolean values
+                        user = User(**user_data)
                         user.set_password(password)
-                    user.save()
-                    updated.append(email)
-                except User.DoesNotExist:
-                    # Create new user
-                    user = User(**user_data)
-                    user.set_password(password)
-                    user.save()
-                    created.append(email)
-                except Exception as e:
-                    skipped.append(f"{email} ({str(e)})")
+                        user.save()
+                        created.append(email)
+                    except Exception as e:
+                        skipped.append(f"Row {row_num} - {email}: {str(e)}")
+
+        except FileNotFoundError:
+            return Response(
+                {"error": "CSV file not found"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"Error processing CSV: {str(e)}"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
         # Return import statistics
         return Response({
