@@ -527,15 +527,14 @@ class SignupView(APIView):
 
         # Set extra required fields
         pending_data['email'] = email
-        pending_data
         pending_data['username'] = username
         pending_data['password'] = request.data.get("password")
+        pending_data['is_active'] = True
 
         # Create or update pending signup
         PendingSignup.objects.update_or_create(
             email=email,
-            defaults=pending_data,
-            is_active=True
+            defaults=pending_data
         )
 
         # Delete the used OTP
