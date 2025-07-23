@@ -534,7 +534,7 @@ class SignupView(APIView):
         # Create or update pending signup
         PendingSignup.objects.update_or_create(
             email=email,
-            defaults=pending_data
+            defaults=pending_data,
             is_active=True
         )
 
