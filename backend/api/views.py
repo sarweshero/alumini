@@ -1385,6 +1385,144 @@ class BirthdayListView(APIView):
 
         return Response(response_data, status=status.HTTP_200_OK)
     
+    def post(self, request):
+        """
+        Send birthday notifications for specific users.
+        
+        Expected payload:
+        {
+            "user_ids": [1, 2, 3],  # Optional: specific user IDs
+            "send_all_today": true,  # Optional: send for all today's birthdays
+            "notify_upcoming": true  # Optional: notify for upcoming birthdays (3 days)
+        }
+        """
+        from .tasks import send_birthday_notifications_to_batchmates
+        
+        user_ids = request.data.get('user_ids', [])
+        send_all_today = request.data.get('send_all_today', False)
+        notify_upcoming = request.data.get('notify_upcoming', False)
+        
+        notifications_triggered = 0
+        errors = []
+        
+        # Handle specific user IDs
+        if user_ids:
+            for user_id in user_ids:
+                try:
+                    user = User.objects.get(id=user_id, date_of_birth__isnull=False)
+                    # Calculate days until birthday
+                    today = timezone.now().date()
+                    birth_month = user.date_of_birth.month
+                    birth_day = user.date_of_birth.day
+                    
+                    try:
+                        next_birthday = timezone.datetime(today.year, birth_month, birth_day).date()
+                    except ValueError:
+                        if birth_month == 2 and birth_day == 29:
+                            next_birthday = timezone.datetime(today.year, 2, 28).date()
+                        else:
+                            continue
+                    
+                    if next_birthday < today:
+                        try:
+                            next_birthday = timezone.datetime(today.year + 1, birth_month, birth_day).date()
+                        except ValueError:
+                            if birth_month == 2 and birth_day == 29:
+                                next_birthday = timezone.datetime(today.year + 1, 2, 28).date()
+                            else:
+                                continue
+                    
+                    days_until = (next_birthday - today).days
+                    send_birthday_notifications_to_batchmates.delay(user_id, days_until=days_until)
+                    notifications_triggered += 1
+                    
+                except User.DoesNotExist:
+                    errors.append(f"User with ID {user_id} not found")
+                except Exception as e:
+                    errors.append(f"Error processing user ID {user_id}: {str(e)}")
+        
+        # Handle all today's birthdays
+        if send_all_today:
+            today = timezone.now().date()
+            today_birthday_users = []
+            
+            users_with_birthdays = User.objects.exclude(date_of_birth__isnull=True).filter(is_active=True)
+            for user in users_with_birthdays:
+                birth_month = user.date_of_birth.month
+                birth_day = user.date_of_birth.day
+                
+                try:
+                    next_birthday = timezone.datetime(today.year, birth_month, birth_day).date()
+                except ValueError:
+                    if birth_month == 2 and birth_day == 29:
+                        next_birthday = timezone.datetime(today.year, 2, 28).date()
+                    else:
+                        continue
+                
+                if next_birthday < today:
+                    try:
+                        next_birthday = timezone.datetime(today.year + 1, birth_month, birth_day).date()
+                    except ValueError:
+                        if birth_month == 2 and birth_day == 29:
+                            next_birthday = timezone.datetime(today.year + 1, 2, 28).date()
+                        else:
+                            continue
+                
+                days_until_birthday = (next_birthday - today).days
+                if days_until_birthday == 0:
+                    today_birthday_users.append(user.id)
+            
+            for user_id in today_birthday_users:
+                send_birthday_notifications_to_batchmates.delay(user_id, days_until=0)
+                notifications_triggered += 1
+        
+        # Handle upcoming birthdays (3 days from now)
+        if notify_upcoming:
+            today = timezone.now().date()
+            upcoming_birthday_users = []
+            
+            users_with_birthdays = User.objects.exclude(date_of_birth__isnull=True).filter(is_active=True)
+            for user in users_with_birthdays:
+                birth_month = user.date_of_birth.month
+                birth_day = user.date_of_birth.day
+                
+                try:
+                    next_birthday = timezone.datetime(today.year, birth_month, birth_day).date()
+                except ValueError:
+                    if birth_month == 2 and birth_day == 29:
+                        next_birthday = timezone.datetime(today.year, 2, 28).date()
+                    else:
+                        continue
+                
+                if next_birthday < today:
+                    try:
+                        next_birthday = timezone.datetime(today.year + 1, birth_month, birth_day).date()
+                    except ValueError:
+                        if birth_month == 2 and birth_day == 29:
+                            next_birthday = timezone.datetime(today.year + 1, 2, 28).date()
+                        else:
+                            continue
+                
+                days_until_birthday = (next_birthday - today).days
+                if days_until_birthday == 3:
+                    upcoming_birthday_users.append(user.id)
+            
+            for user_id in upcoming_birthday_users:
+                send_birthday_notifications_to_batchmates.delay(user_id, days_until=3)
+                notifications_triggered += 1
+        
+        response_data = {
+            'success': True,
+            'notifications_triggered': notifications_triggered,
+            'message': f'Triggered {notifications_triggered} birthday notification tasks'
+        }
+        
+        if errors:
+            response_data['errors'] = errors
+            response_data['partial_success'] = True
+        
+        return Response(response_data, status=status.HTTP_200_OK)
+    
 class DropdownFiltersView(APIView):
     """API to fetch distinct values for dropdown filters."""
     permission_classes = [permissions.AllowAny]

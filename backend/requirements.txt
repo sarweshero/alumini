@@ -1,5 +1,8 @@
 asgiref
 cachetools
+celery
+django-celery-beat
+redis
 channels
 Django
 django-allauth
