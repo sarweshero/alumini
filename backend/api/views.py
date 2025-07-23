@@ -1144,7 +1144,7 @@ class ApproveSignupView(APIView):
         
         # Send enhanced approval notification email
         user_name = user.first_name or user.username
-        login_url = request.build_absolute_uri('/login/')
+        login_url = "https://karpagamalumni.in/login/"
         send_approval_notification_email(pending.email, user_name, login_url)
         
         # Clean up pending signup
@@ -1899,7 +1899,7 @@ class AlumniAdminFilterView(ListAPIView):
                     if notify_user and target_user.email:
                         try:
                             user_name = target_user.first_name or target_user.username
-                            login_url = request.build_absolute_uri('/login/')
+                            login_url = "https://karpagamalumni.in/login/"
                             send_notification_email(
                                 target_user.email,
                                 "✅ Alumni Portal - Account Reactivated",
