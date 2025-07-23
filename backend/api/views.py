@@ -739,7 +739,7 @@ class StaffLoginView(APIView):
         else:
             user = authenticate(username=identifier, password=password)
 
-        if user and user.is_staff:
+        if user and user.role in ['Admin', 'Staff']:
             token, _ = Token.objects.get_or_create(user=user)
             LoginLog.objects.create(user=user)
             return Response({
