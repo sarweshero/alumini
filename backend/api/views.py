@@ -1399,6 +1399,7 @@ class DropdownFiltersView(APIView):
             "role": User.objects.exclude(role__isnull=True).exclude(role="").values_list("role", flat=True).distinct().order_by("role"),
             "passed_out_year": User.objects.exclude(passed_out_year__isnull=True).exclude(passed_out_year="").values_list("passed_out_year", flat=True).distinct().order_by("passed_out_year"),
             "course": User.objects.exclude(course__isnull=True).exclude(course="").values_list("course", flat=True).distinct().order_by("course"),
+            "email": User.objects.exclude(email__isnull=True).exclude(email="").values_list("email", flat=True).distinct().order_by("email"),
         }
 
         # Convert QuerySets to lists for JSON serialization
