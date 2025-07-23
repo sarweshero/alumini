@@ -1440,7 +1440,7 @@ class AlumniAdminFilter(django_filters.FilterSet):
             'date_of_birth', 'current_work', 'college_name', 'chapter',
             'phone', 'city', 'state', 'country', 'zip_code', 'role',
             'course_end_year', 'company', 'position', 'course', 'passed_out_year', 
-            'current_location', 'is_active', 'is_staff', 'status'
+            'current_location', 'is_active', 'is_staff', 'status', 'Address'
         ]
 
     def filter_roles_played(self, queryset, name, value):
@@ -1476,7 +1476,7 @@ class AlumniAdminFilterView(ListAPIView):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        queryset = queryset.exclude(id=self.request.user.id)
+        queryset = queryset.exclude(id=self.request.user.id).order_by('-id')
 
         # Filter by approval status
         status_filter = self.request.query_params.get('status', None)
