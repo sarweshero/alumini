@@ -3656,3 +3656,88 @@ class ProfileCompletionInsightsView(APIView):
         }
         
         return Response(response_data, status=status.HTTP_200_OK)
+
+
+import pandas as pd
+import pandas as pd
+from datetime import datetime
+from .models import CustomUser
+
+def map_and_save_users(csv_path):
+    # Load CSV data
+    data = pd.read_csv(csv_path)
+
+    for _, row in data.iterrows():
+        try:
+            # Step 1: Clean DOB and generate password
+            dob_str = str(row.get("Date of Birth")).strip()
+            dob = None
+
+            if dob_str.lower() not in ["", "nan", "null"]:
+                try:
+                    dob = pd.to_datetime(dob_str, errors='raise')
+                    password = dob.strftime("%d%m%Y")  # Convert to DDMMYYYY
+                except Exception as e:
+                    print(f"⚠️ Invalid DOB format for user: {row.get('email_id')}, using default password. Error: {e}")
+                    password = "defaultpassword"
+            else:
+                print(f"⚠️ Using default password for user: {row.get('email_id')}")
+                password = "defaultpassword"
+
+            # Step 2: Clean and prepare other fields safely
+            email = str(row.get("email_id", "")).strip()
+            name = str(row.get("Name", "")).strip()
+            salutation_raw = row.get("Salutation")
+            salutation = str(salutation_raw).strip() if pd.notna(salutation_raw) else None
+
+            gender_raw = row.get("Gender")
+            gender = str(gender_raw).strip() if pd.notna(gender_raw) else "Nil"
+
+            # Step 3: Auto-fill salutation based on gender if missing
+            if not salutation:
+                if gender.lower() == "male":
+                    salutation = "Mr"
+                elif gender.lower() == "female":
+                    salutation = "Ms"
+                else:
+                    salutation = "Mx"
+
+            course = str(row.get("course", "")).strip()
+            role = str(row.get("role", "Alumni")).strip()
+
+            # Step 4: Prepare user data dictionary
+            user_data = {
+                "username": email,
+                "first_name": name,
+                "salutation": salutation,
+                "is_active": True,
+                "is_staff": role.lower() in ["staff", "admin"],
+                "is_superuser": role.lower() == "admin",
+                "gender": gender,
+                "date_of_birth": dob,
+                "course": course,
+                "email": email,
+                "role": role,
+            }
+
+            # Step 5: Create or update user
+            user, created = CustomUser.objects.update_or_create(
+                username=email,
+                defaults=user_data
+            )
+
+            if created:
+                user.set_password(password)
+                user.save()
+                print(f"[CREATED] {email} | Name: {name} | Password: {password}")
+            else:
+                print(f"[UPDATED] {email} | Name: {name}")
+
+        except Exception as e:
+            print(f"[ERROR] {row.get('email_id')} | {e}")
+
+    print("✅ Data mapping and saving completed.")
+
+# Example usage
+csv_path = "api/registered_users_with_roles.csv"
+map_and_save_users(csv_path)
