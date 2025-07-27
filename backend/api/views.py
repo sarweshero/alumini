@@ -17,6 +17,7 @@ import os
 import csv
 import json
 import random
+import re
 import pandas as pd
 import django_filters
 from datetime import datetime, timedelta
@@ -1561,6 +1562,55 @@ class AlumniPagination(PageNumberPagination):
     max_page_size = 1000
     
 class AlumniAdminFilter(django_filters.FilterSet):
+    """Enhanced filter set for alumni admin view with comprehensive filtering options."""
+    
+    # Text search filters
+    username = django_filters.CharFilter(lookup_expr='icontains')
+    email = django_filters.CharFilter(lookup_expr='icontains')
+    first_name = django_filters.CharFilter(lookup_expr='icontains')
+    last_name = django_filters.CharFilter(lookup_expr='icontains')
+    phone = django_filters.CharFilter(lookup_expr='icontains')
+    current_work = django_filters.CharFilter(lookup_expr='icontains')
+    college_name = django_filters.CharFilter(lookup_expr='icontains')
+    company = django_filters.CharFilter(lookup_expr='icontains')
+    position = django_filters.CharFilter(lookup_expr='icontains')
+    course = django_filters.CharFilter(lookup_expr='icontains')
+    current_location = django_filters.CharFilter(lookup_expr='icontains')
+    city = django_filters.CharFilter(lookup_expr='icontains')
+    state = django_filters.CharFilter(lookup_expr='icontains')
+    country = django_filters.CharFilter(lookup_expr='icontains')
+    chapter = django_filters.CharFilter(lookup_expr='icontains')
+    Address = django_filters.CharFilter(lookup_expr='icontains')
+    
+    # Exact match filters
+    gender = django_filters.ChoiceFilter(choices=[
+        ('Male', 'Male'),
+        ('Female', 'Female'),
+        ('Other', 'Other'),
+    ])
+    role = django_filters.CharFilter(lookup_expr='iexact')
+    zip_code = django_filters.CharFilter(lookup_expr='exact')
+    
+    # Numeric filters
+    passed_out_year = django_filters.NumberFilter()
+    passed_out_year_range = django_filters.RangeFilter(field_name='passed_out_year')
+    course_end_year = django_filters.NumberFilter()
+    course_end_year_range = django_filters.RangeFilter(field_name='course_end_year')
+    
+    # Date filters
+    date_of_birth = django_filters.DateFilter()
+    date_of_birth_range = django_filters.DateFromToRangeFilter(field_name='date_of_birth')
+    date_joined = django_filters.DateFilter()
+    date_joined_range = django_filters.DateFromToRangeFilter(field_name='date_joined')
+    last_login = django_filters.DateFilter()
+    last_login_range = django_filters.DateFromToRangeFilter(field_name='last_login')
+    
+    # Boolean filters
+    is_active = django_filters.BooleanFilter()
+    is_staff = django_filters.BooleanFilter()
+    is_superuser = django_filters.BooleanFilter()
+    
+    # Custom method filters
     roles_played = django_filters.CharFilter(method='filter_roles_played')
     Worked_in = django_filters.CharFilter(method='filter_Worked_in')
     status = django_filters.ChoiceFilter(
@@ -1568,9 +1618,13 @@ class AlumniAdminFilter(django_filters.FilterSet):
         choices=[
             ('active', 'Active'),
             ('inactive', 'Inactive'),
+            ('all', 'All'),
         ],
         method='filter_status'
     )
+    
+    # Search across multiple fields
+    search = django_filters.CharFilter(method='filter_search')
 
     class Meta:
         model = User
@@ -1579,22 +1633,58 @@ class AlumniAdminFilter(django_filters.FilterSet):
             'date_of_birth', 'current_work', 'college_name', 'chapter',
             'phone', 'city', 'state', 'country', 'zip_code', 'role',
             'course_end_year', 'company', 'position', 'course', 'passed_out_year', 
-            'current_location', 'is_active', 'is_staff', 'status', 'Address'
+            'current_location', 'is_active', 'is_staff', 'is_superuser', 'Address'
         ]
 
     def filter_roles_played(self, queryset, name, value):
-        return queryset.filter(Q(roles_played__startswith=value) | Q(roles_played__icontains=value))
+        """Filter by roles played field with partial matching."""
+        if value:
+            return queryset.filter(
+                Q(roles_played__icontains=value) |
+                Q(roles_played__startswith=value) |
+                Q(roles_played__endswith=value)
+            )
+        return queryset
 
     def filter_Worked_in(self, queryset, name, value):
-        return queryset.filter(Q(Worked_in__startswith=value) | Q(Worked_in__icontains=value))
+        """Filter by worked in field with partial matching."""
+        if value:
+            return queryset.filter(
+                Q(Worked_in__icontains=value) |
+                Q(Worked_in__startswith=value) |
+                Q(Worked_in__endswith=value)
+            )
+        return queryset
 
     def filter_status(self, queryset, name, value):
+        """Filter by user status (active/inactive)."""
         if value == 'active':
             return queryset.filter(is_active=True)
         elif value == 'inactive':
             return queryset.filter(is_active=False)
         return queryset
-    
+
+    def filter_search(self, queryset, name, value):
+        """Global search across multiple fields."""
+        if value:
+            return queryset.filter(
+                Q(username__icontains=value) |
+                Q(email__icontains=value) |
+                Q(first_name__icontains=value) |
+                Q(last_name__icontains=value) |
+                Q(phone__icontains=value) |
+                Q(current_work__icontains=value) |
+                Q(college_name__icontains=value) |
+                Q(company__icontains=value) |
+                Q(position__icontains=value) |
+                Q(course__icontains=value) |
+                Q(city__icontains=value) |
+                Q(state__icontains=value) |
+                Q(country__icontains=value) |
+                Q(current_location__icontains=value)
+            )
+        return queryset
+
 class AlumniAdminFilterView(ListAPIView):
     """
     Enhanced admin view for filtering alumni with user management capabilities.
@@ -1604,7 +1694,7 @@ class AlumniAdminFilterView(ListAPIView):
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = AlumniPagination
-    filter_backends = [SearchFilter, OrderingFilter]
+    filter_backends = [django_filters.rest_framework.DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = AlumniAdminFilter
 
     search_fields = [
@@ -1614,26 +1704,12 @@ class AlumniAdminFilterView(ListAPIView):
     ordering = ['first_name', 'last_name']
 
     def get_queryset(self):
+        """Get filtered queryset with proper ordering."""
         queryset = super().get_queryset().order_by('id')
-        queryset = queryset.exclude(id=self.request.user.id)
-
-        # Filter by approval status
-        status_filter = self.request.query_params.get('status', None)
-        if status_filter:
-            if status_filter.lower() == 'active':
-                queryset = queryset.filter(is_active=True)
-            elif status_filter.lower() == 'inactive':
-                queryset = queryset.filter(is_active=False)
-
-        # Exact match for search query
-        search_query = self.request.query_params.get('search', None)
-        if search_query:
-            queryset = queryset.filter(
-                Q(first_name__icontains=search_query) | 
-                Q(last_name__icontains=search_query) |
-                Q(email__icontains=search_query) |
-                Q(username__icontains=search_query)
-            )
+        
+        # Exclude current user from results if needed
+        if hasattr(self.request, 'user') and self.request.user.is_authenticated:
+            queryset = queryset.exclude(id=self.request.user.id)
 
         return queryset
 
@@ -2899,7 +2975,6 @@ class BusinessDirectoryListCreateView(APIView):
             # Re-serialize with images included
             updated_serializer = BusinessDirectorySerializer(business)
             return Response(updated_serializer.data, status=status.HTTP_201_CREATED)
-            
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
