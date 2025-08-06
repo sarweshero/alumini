@@ -3720,6 +3720,26 @@ def map_and_save_users(csv_path):
                     return default
                 return str(value).strip()
 
+            def clean_year_field(value, default=""):
+                """Helper function specifically for year fields to handle .0 issue"""
+                if pd.isna(value) or str(value).strip().lower() in ["nan", "null", ""]:
+                    return default
+                
+                # Convert to string and remove .0 if present
+                year_str = str(value).strip()
+                if year_str.endswith('.0'):
+                    year_str = year_str[:-2]
+                
+                # Validate it's a reasonable year
+                try:
+                    year_int = int(float(year_str))
+                    if 1900 <= year_int <= 2030:  # Reasonable year range
+                        return str(year_int)
+                    else:
+                        return default
+                except (ValueError, TypeError):
+                    return default
+
             def clean_numeric_field(value, default=0):
                 """Helper function to clean numeric fields - return 0 instead of None for non-nullable fields"""
                 if pd.isna(value) or str(value).strip().lower() in ["nan", "null", ""]:
@@ -3808,13 +3828,13 @@ def map_and_save_users(csv_path):
                 "correspondence_country": clean_field(row.get("correspondence_country", "")),
                 "correspondence_pincode": clean_field(row.get("correspondence_pincode", "")),
                 
-                # Educational information - handle CharField fields properly
+                # Educational information - handle CharField fields properly with year cleaning
                 "college_name": clean_field(row.get("college_name", "")),
                 "course": clean_field(row.get("course", "")),
                 "stream": clean_field(row.get("stream", "")),
-                "passed_out_year": clean_field(row.get("passed_out_year", "")),
-                "course_start_year": clean_field(row.get("course_start_year", "")),  # CharField, so empty string instead of None
-                "course_end_year": clean_field(row.get("course_end_year", "")),    # CharField, so empty string instead of None
+                "passed_out_year": clean_year_field(row.get("passed_out_year", "")),  # Use clean_year_field
+                "course_start_year": clean_year_field(row.get("course_start_year", "")),  # Use clean_year_field
+                "course_end_year": clean_year_field(row.get("course_end_year", "")),  # Use clean_year_field
                 "roll_no": clean_field(row.get("roll_no", "")),
                 "branch": clean_field(row.get("branch", "")),
                 
@@ -3824,22 +3844,28 @@ def map_and_save_users(csv_path):
                 "position": clean_field(row.get("position", "")),
                 "work_experience": clean_float_field(row.get("work_experience"), 0.0),
                 
-                # Faculty specific fields
+                # Faculty specific fields with year cleaning
                 "faculty_job_title": clean_field(row.get("faculty_job_title", "")),
                 "faculty_institute": clean_field(row.get("faculty_institute", "")),
                 "faculty_department": clean_field(row.get("faculty_department", "")),
-                "faculty_start_year": clean_field(row.get("faculty_start_year", "")),
+                "faculty_start_year": clean_year_field(row.get("faculty_start_year", "")),  # Use clean_year_field
                 "faculty_start_month": clean_field(row.get("faculty_start_month", "")),
-                "faculty_end_year": clean_field(row.get("faculty_end_year", "")),
+                "faculty_end_year": clean_year_field(row.get("faculty_end_year", "")),  # Use clean_year_field
                 "faculty_end_month": clean_field(row.get("faculty_end_month", "")),
                 
-                # Additional fields
+                # Social links
+                "facebook_link": clean_field(row.get("facebook_link", "")),
+                "linkedin_link": clean_field(row.get("linkedin_link", "")),
+                "website_link": clean_field(row.get("website_link", "")),
+                "twitter_link": clean_field(row.get("twitter_link", "")),
+                
+                # Additional fields with year cleaning
                 "chapter": clean_field(row.get("chapter", "")),
                 "member_roles": clean_field(row.get("member_roles", "")),
                 "educational_course": clean_field(row.get("educational_course", "")),
                 "educational_institute": clean_field(row.get("educational_institute", "")),
-                "start_year": clean_field(row.get("start_year", "")),
-                "end_year": clean_field(row.get("end_year", "")),
+                "start_year": clean_year_field(row.get("start_year", "")),  # Use clean_year_field
+                "end_year": clean_year_field(row.get("end_year", "")),  # Use clean_year_field
                 
                 # Boolean flags
                 "is_entrepreneur": clean_boolean_field(row.get("is_entrepreneur", False)),
@@ -3850,6 +3876,7 @@ def map_and_save_users(csv_path):
                 "approved_on": clean_field(row.get("approved_on", "")),
                 "profile_updated_on": clean_field(row.get("profile_updated_on", "")),
                 "admin_note": clean_field(row.get("admin_note", "")),
+                "profile_type": clean_field(row.get("profile_type", "")),
                 "bio": clean_field(row.get("bio", "")),
             }
 
