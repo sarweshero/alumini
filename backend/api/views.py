@@ -3940,5 +3940,5 @@ def map_and_save_users(csv_path):
     print("🎉 Data mapping and saving completed!")
 
 
-csv_path = "api/registered_users_with_roles.csv"
-map_and_save_users(csv_path)
+# csv_path = "api/registered_users_with_roles.csv"
+# map_and_save_users(csv_path)
