@@ -3659,85 +3659,259 @@ class ProfileCompletionInsightsView(APIView):
 
 
 import pandas as pd
-import pandas as pd
 from datetime import datetime
+from django.utils import timezone
 from .models import CustomUser
 
 def map_and_save_users(csv_path):
+    """
+    Enhanced function to map CSV data to CustomUser model with comprehensive field mapping
+    """
     # Load CSV data
-    data = pd.read_csv(csv_path)
+    try:
+        data = pd.read_csv(csv_path)
+        print(f"📊 Loaded CSV with {len(data)} rows")
+    except Exception as e:
+        print(f"❌ Error loading CSV: {e}")
+        return
 
-    for _, row in data.iterrows():
+    success_count = 0
+    error_count = 0
+    
+    for index, row in data.iterrows():
         try:
-            # Step 1: Clean DOB and generate password
-            dob_str = str(row.get("Date of Birth")).strip()
+            # Step 1: Clean and prepare email (primary key)
+            email = str(row.get("email", "")).strip().lower()
+            if not email or email in ["nan", "null", ""]:
+                print(f"⚠️ Row {index + 2}: No email provided, skipping")
+                error_count += 1
+                continue
+
+            # Step 2: Process Date of Birth and generate password
+            dob_str = str(row.get("date_of_birth", "")).strip()
             dob = None
+            password = "defaultpassword"  # Default password
 
-            if dob_str.lower() not in ["", "nan", "null"]:
+            if dob_str and dob_str.lower() not in ["", "nan", "null"]:
                 try:
-                    dob = pd.to_datetime(dob_str, errors='raise')
-                    password = dob.strftime("%d%m%Y")  # Convert to DDMMYYYY
+                    # Try multiple date formats
+                    for date_format in ["%d-%m-%Y", "%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y"]:
+                        try:
+                            dob = datetime.strptime(dob_str, date_format).date()
+                            password = dob.strftime("%d%m%Y")  # Convert to DDMMYYYY
+                            break
+                        except ValueError:
+                            continue
+                    
+                    if not dob:
+                        # Try pandas to_datetime as fallback
+                        dob = pd.to_datetime(dob_str, errors='coerce')
+                        if pd.notna(dob):
+                            dob = dob.date()
+                            password = dob.strftime("%d%m%Y")
+                            
                 except Exception as e:
-                    print(f"⚠️ Invalid DOB format for user: {row.get('email_id')}, using default password. Error: {e}")
-                    password = "defaultpassword"
-            else:
-                print(f"⚠️ Using default password for user: {row.get('email_id')}")
-                password = "defaultpassword"
+                    print(f"⚠️ Row {index + 2}: Invalid DOB format '{dob_str}', using default password. Error: {e}")
 
-            # Step 2: Clean and prepare other fields safely
-            email = str(row.get("email_id", "")).strip()
-            name = str(row.get("Name", "")).strip()
-            salutation_raw = row.get("Salutation")
-            salutation = str(salutation_raw).strip() if pd.notna(salutation_raw) else None
+            # Step 3: Clean and prepare basic fields with proper null handling
+            def clean_field(value, default=""):
+                """Helper function to clean field values"""
+                if pd.isna(value) or str(value).strip().lower() in ["nan", "null", ""]:
+                    return default
+                return str(value).strip()
 
-            gender_raw = row.get("Gender")
-            gender = str(gender_raw).strip() if pd.notna(gender_raw) else "Nil"
+            def clean_numeric_field(value, default=0):
+                """Helper function to clean numeric fields - return 0 instead of None for non-nullable fields"""
+                if pd.isna(value) or str(value).strip().lower() in ["nan", "null", ""]:
+                    return default
+                try:
+                    return int(float(str(value)))
+                except (ValueError, TypeError):
+                    return default
 
-            # Step 3: Auto-fill salutation based on gender if missing
-            if not salutation:
-                if gender.lower() == "male":
-                    salutation = "Mr"
-                elif gender.lower() == "female":
-                    salutation = "Ms"
-                else:
-                    salutation = "Mx"
+            def clean_float_field(value, default=0.0):
+                """Helper function to clean float fields"""
+                if pd.isna(value) or str(value).strip().lower() in ["nan", "null", ""]:
+                    return default
+                try:
+                    return float(str(value))
+                except (ValueError, TypeError):
+                    return default
 
-            course = str(row.get("course", "")).strip()
-            role = str(row.get("role", "Alumni")).strip()
+            def clean_boolean_field(value, default=False):
+                """Helper function to clean boolean fields"""
+                if pd.isna(value):
+                    return default
+                str_val = str(value).strip().lower()
+                if str_val in ["true", "1", "yes", "on", "staff", "admin"]:
+                    return True
+                elif str_val in ["false", "0", "no", "off", "alumni", ""]:
+                    return False
+                return default
 
-            # Step 4: Prepare user data dictionary
+            # Step 4: Map all CSV fields to model fields
+            name_parts = clean_field(row.get("name", "")).split(" ", 1)
+            first_name = name_parts[0] if name_parts else ""
+            last_name = name_parts[1] if len(name_parts) > 1 else ""
+
+            # Determine role and permissions
+            role = clean_field(row.get("role", "Alumni"))
+            label = clean_field(row.get("label", ""))
+            
+            # Set staff and superuser based on role and label
+            is_staff = role.lower() in ["staff", "admin"] or "staff" in label.lower() or "professor" in label.lower()
+            is_superuser = role.lower() == "admin"
+            
+            # If no explicit role but has staff indicators in label, set as Staff
+            if role.lower() == "alumni" and ("professor" in label.lower() or "assistant" in label.lower() or "associate" in label.lower()):
+                role = "Staff"
+                is_staff = True
+
+            # Step 5: Prepare comprehensive user data with proper null handling
             user_data = {
+                # Basic authentication fields
                 "username": email,
-                "first_name": name,
-                "salutation": salutation,
-                "is_active": True,
-                "is_staff": role.lower() in ["staff", "admin"],
-                "is_superuser": role.lower() == "admin",
-                "gender": gender,
-                "date_of_birth": dob,
-                "course": course,
                 "email": email,
+                "first_name": first_name,
+                "last_name": last_name,
+                "is_active": True,
+                "is_staff": is_staff,
+                "is_superuser": is_superuser,
+                
+                # Personal information
+                "salutation": clean_field(row.get("salutation")),
+                "name": clean_field(row.get("name", "")),
+                "gender": clean_field(row.get("gender", "")),
+                "date_of_birth": dob,
+                "label": label,
                 "role": role,
+                
+                # Contact information
+                "phone": clean_field(row.get("Mobile Phone No.", "")),
+                "office_phone_no": clean_field(row.get("Office Phone No.", "")),
+                "home_phone_no": clean_field(row.get("Home Phone No.", "")),
+                "secondary_email": clean_field(row.get("secondary_email", "")),
+                
+                # Address information
+                "Address": clean_field(row.get("Address", "")),
+                "city": clean_field(row.get("city", "")),
+                "state": clean_field(row.get("state", "")),
+                "country": clean_field(row.get("country", "")),
+                "zip_code": clean_field(row.get("zip_code", "")),
+                "current_location": clean_field(row.get("current_location", "")),
+                "home_town": clean_field(row.get("home_town", "")),
+                
+                # Correspondence address
+                "correspondence_address": clean_field(row.get("correspondence_address", "")),
+                "correspondence_city": clean_field(row.get("correspondence_city", "")),
+                "correspondence_state": clean_field(row.get("correspondence_state", "")),
+                "correspondence_country": clean_field(row.get("correspondence_country", "")),
+                "correspondence_pincode": clean_field(row.get("correspondence_pincode", "")),
+                
+                # Educational information - handle CharField fields properly
+                "college_name": clean_field(row.get("college_name", "")),
+                "course": clean_field(row.get("course", "")),
+                "stream": clean_field(row.get("stream", "")),
+                "passed_out_year": clean_field(row.get("passed_out_year", "")),
+                "course_start_year": clean_field(row.get("course_start_year", "")),  # CharField, so empty string instead of None
+                "course_end_year": clean_field(row.get("course_end_year", "")),    # CharField, so empty string instead of None
+                "roll_no": clean_field(row.get("roll_no", "")),
+                "branch": clean_field(row.get("branch", "")),
+                
+                # Professional information
+                "current_work": clean_field(row.get("current_work", "")),
+                "company": clean_field(row.get("company", "")),
+                "position": clean_field(row.get("position", "")),
+                "work_experience": clean_float_field(row.get("work_experience"), 0.0),
+                
+                # Faculty specific fields
+                "faculty_job_title": clean_field(row.get("faculty_job_title", "")),
+                "faculty_institute": clean_field(row.get("faculty_institute", "")),
+                "faculty_department": clean_field(row.get("faculty_department", "")),
+                "faculty_start_year": clean_field(row.get("faculty_start_year", "")),
+                "faculty_start_month": clean_field(row.get("faculty_start_month", "")),
+                "faculty_end_year": clean_field(row.get("faculty_end_year", "")),
+                "faculty_end_month": clean_field(row.get("faculty_end_month", "")),
+                
+                # Additional fields
+                "chapter": clean_field(row.get("chapter", "")),
+                "member_roles": clean_field(row.get("member_roles", "")),
+                "educational_course": clean_field(row.get("educational_course", "")),
+                "educational_institute": clean_field(row.get("educational_institute", "")),
+                "start_year": clean_field(row.get("start_year", "")),
+                "end_year": clean_field(row.get("end_year", "")),
+                
+                # Boolean flags
+                "is_entrepreneur": clean_boolean_field(row.get("is_entrepreneur", False)),
+                
+                # Status fields - using CharField, so empty string
+                "registered": clean_field(row.get("registered", "")),
+                "registered_on": clean_field(row.get("registered_on", "")),
+                "approved_on": clean_field(row.get("approved_on", "")),
+                "profile_updated_on": clean_field(row.get("profile_updated_on", "")),
+                "admin_note": clean_field(row.get("admin_note", "")),
+                "bio": clean_field(row.get("bio", "")),
             }
 
-            # Step 5: Create or update user
+            # Handle JSON fields (arrays) with proper list handling
+            for json_field, csv_field in [
+                ('professional_skills', 'professional_skills'),
+                ('industries_worked_in', 'industries_worked_in'),
+                ('roles_played', 'roles_played'),
+                ('Worked_in', 'worked_in'),
+                ('experience', 'experience')
+            ]:
+                field_value = clean_field(row.get(csv_field, ""))
+                if field_value:
+                    # Split by comma and clean each item
+                    user_data[json_field] = [item.strip() for item in field_value.split(',') if item.strip()]
+                else:
+                    user_data[json_field] = []
+
+            # Handle social_links as JSON
+            social_links = {}
+            if clean_field(row.get("facebook_link", "")):
+                social_links["Facebook"] = clean_field(row.get("facebook_link", ""))
+            if clean_field(row.get("linkedin_link", "")):
+                social_links["LinkedIn"] = clean_field(row.get("linkedin_link", ""))
+            if clean_field(row.get("twitter_link", "")):
+                social_links["Twitter"] = clean_field(row.get("twitter_link", ""))
+            if clean_field(row.get("website_link", "")):
+                social_links["Website"] = clean_field(row.get("website_link", ""))
+            
+            user_data['social_links'] = social_links
+
+            # Step 6: Create or update user
             user, created = CustomUser.objects.update_or_create(
-                username=email,
+                email=email,  # Use email as the unique identifier
                 defaults=user_data
             )
 
             if created:
                 user.set_password(password)
                 user.save()
-                print(f"[CREATED] {email} | Name: {name} | Password: {password}")
+                print(f"✅ [CREATED] {email} | Name: {first_name} {last_name} | Role: {role} | Password: {password}")
+                success_count += 1
             else:
-                print(f"[UPDATED] {email} | Name: {name}")
+                # Update password only if it's different
+                if not user.check_password(password):
+                    user.set_password(password)
+                    user.save()
+                print(f"🔄 [UPDATED] {email} | Name: {first_name} {last_name} | Role: {role}")
+                success_count += 1
 
         except Exception as e:
-            print(f"[ERROR] {row.get('email_id')} | {e}")
+            print(f"❌ [ERROR] Row {index + 2} - {row.get('email', 'Unknown')}: {str(e)}")
+            error_count += 1
+            continue
 
-    print("✅ Data mapping and saving completed.")
+    # Final summary
+    print(f"\n📊 IMPORT SUMMARY:")
+    print(f"✅ Successfully processed: {success_count} users")
+    print(f"❌ Errors encountered: {error_count} users")
+    print(f"📈 Total rows processed: {success_count + error_count}")
+    print("🎉 Data mapping and saving completed!")
 
-# Example usage
+
 csv_path = "api/registered_users_with_roles.csv"
 map_and_save_users(csv_path)
