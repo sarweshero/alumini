@@ -3260,8 +3260,8 @@ class NewsRoomDetailView(APIView):
         news_article = self.get_object(pk)
         
         # Only the author, staff, or admin can delete
-        if news_article.user == request.user or request.user.role not in ["Staff", "Admin"]:
-            return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+        # if news_article.user == request.user or request.user.role not in ["Staff", "Admin"]:
+        #     return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
         
         news_article.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
