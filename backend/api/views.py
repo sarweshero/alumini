@@ -2119,8 +2119,8 @@ class EventDetailView(BaseMultiPartView, BaseObjectRetrievalMixin):
                 
                 # Update images if provided
                 if request.FILES.getlist('images'):
-                    # Delete old images
-                    event.eventimage_set.all().delete()
+                    # Delete old images - use the correct related name
+                    EventImage.objects.filter(event=event).delete()
                     
                     # Add new images
                     images = request.FILES.getlist('images')
