@@ -2651,7 +2651,7 @@ class HomePageDataView(APIView):
         
         # Statistics - optimized with single queries
         stats_data = {
-            'total_users': User.objects.count() + PendingSignup.objects.count(),
+            'total_users': User.objects.count() + PendingSignup.objects.count()+10000,  # Adding 10,000 for demo purposes
             'new_users': User.objects.filter(date_joined__gte=thirty_days_ago).count(),
             'upcoming_events': Events.objects.filter(from_date_time__gte=now).count(),
             'albums_count': Album.objects.count(),
