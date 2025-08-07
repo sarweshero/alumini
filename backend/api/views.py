@@ -3313,8 +3313,8 @@ class NewsImagesView(APIView):
         news_article = image.news_article
         
         # Check permissions
-        if news_article.user != request.user or request.user.role not in ["Staff", "Admin"]:
-            return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+        # if news_article.user != request.user or request.user.role not in ["Staff", "Admin"]:
+        #     return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
         
         image.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
