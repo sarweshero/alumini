@@ -2214,7 +2214,6 @@ class JobDetailView(APIView):
             
         serializer = JobsSerializer(job)
         return Response(serializer.data, status=status.HTTP_200_OK)
-        
     def put(self, request, pk):
         """
         Update a specific job.
@@ -2225,10 +2224,33 @@ class JobDetailView(APIView):
         
         # Check permissions
         if job.user == request.user or request.user.role in ["Staff", "Admin"]:
-            serializer = JobsSerializer(job, data=request.data, partial=True)
+            # Create a copy of request data to avoid modifying the original
+            data = request.data.copy()
+            
+            # Remove images from serializer data to handle separately
+            if 'images' in data:
+                data.pop('images')
+                
+            serializer = JobsSerializer(job, data=data, partial=True)
             if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_200_OK)
+                job = serializer.save()
+                
+                # Handle image updates
+                images = request.FILES.getlist('images')
+                
+                # Check if images were explicitly provided in the request
+                # This handles both new images and explicit removal
+                if 'images' in request.FILES or 'images' in request.data:
+                    # Delete old images only if new images are being set
+                    JobImage.objects.filter(job=job).delete()
+                    
+                    # Add new images if any were provided
+                    for img in images:
+                        JobImage.objects.create(job=job, image=img)
+                
+                # Return updated job data with images
+                updated_serializer = JobsSerializer(job)
+                return Response(updated_serializer.data, status=status.HTTP_200_OK)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
         
