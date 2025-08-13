@@ -3948,5 +3948,120 @@ def map_and_save_users(csv_path):
     print("🎉 Data mapping and saving completed!")
 
 
-# csv_path = "api/registered_users_with_roles.csv"
-# map_and_save_users(csv_path)
+
+def clean_field(value, default=""):
+    """Helper function to clean field values"""
+    if pd.isna(value) or str(value).strip().lower() in ["nan", "null", ""]:
+        return default
+    return str(value).strip()
+
+def map_course_and_stream(csv_path):
+    """
+    Simple function to update only course and branch fields for existing users
+    """
+    # Load CSV data
+    try:
+        data = pd.read_csv(csv_path)
+        print(f"📊 Loaded CSV with {len(data)} rows")
+    except Exception as e:
+        print(f"❌ Error loading CSV: {e}")
+        return
+
+    updated_count = 0
+    not_found_count = 0
+    error_count = 0
+    
+    # Track unique course and branch combinations
+    unique_courses = set()
+    unique_branches = set()
+    course_branch_combinations = set()
+    
+    for index, row in data.iterrows():
+        try:
+            # Get email to find the user
+            email = str(row.get("email", "")).strip().lower()
+            if not email or email in ["nan", "null", ""]:
+                print(f"⚠️ Row {index + 2}: No email provided, skipping")
+                error_count += 1
+                continue
+
+            # Check if user exists
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                print(f"⚠️ Row {index + 2}: User with email {email} not found, skipping")
+                not_found_count += 1
+                continue
+
+            # Get course and stream from CSV
+            course = clean_field(row.get("course", ""))
+            stream = clean_field(row.get("stream", ""))
+            
+            # Update only if CSV has data
+            updated = False
+            if course:
+                user.course = course
+                unique_courses.add(course)
+                updated = True
+            if stream:
+                user.branch = stream  # Map stream to branch
+                unique_branches.add(stream)
+                updated = True
+            
+            # Track course-branch combinations
+            if course and stream:
+                course_branch_combinations.add((course, stream))
+            
+            if updated:
+                user.save(update_fields=['course', 'branch'])
+                print(f"🔄 [UPDATED] {email} | Course: {course} | Branch: {stream}")
+                updated_count += 1
+            else:
+                print(f"⚠️ Row {index + 2}: No course/stream data for {email}")
+
+        except Exception as e:
+            print(f"❌ [ERROR] Row {index + 2} - {row.get('email', 'Unknown')}: {str(e)}")
+            error_count += 1
+            continue
+
+    # Final summary
+    print(f"\n📊 UPDATE SUMMARY:")
+    print(f"🔄 Successfully updated: {updated_count} users")
+    print(f"⚠️ Users not found: {not_found_count} users")
+    print(f"❌ Errors encountered: {error_count} users")
+    print(f"📈 Total rows processed: {updated_count + not_found_count + error_count}")
+    
+    # Report of unique courses and branches added
+    print(f"\n📋 COURSE & BRANCH REPORT:")
+    print(f"=" * 50)
+    
+    print(f"\n🎓 UNIQUE COURSES ADDED ({len(unique_courses)}):")
+    if unique_courses:
+        for i, course in enumerate(sorted(unique_courses), 1):
+            print(f"   {i:2d}. {course}")
+    else:
+        print("   No courses were added")
+    
+    print(f"\n🌿 UNIQUE BRANCHES ADDED ({len(unique_branches)}):")
+    if unique_branches:
+        for i, branch in enumerate(sorted(unique_branches), 1):
+            print(f"   {i:2d}. {branch}")
+    else:
+        print("   No branches were added")
+    
+    print(f"\n🔗 COURSE-BRANCH COMBINATIONS ({len(course_branch_combinations)}):")
+    if course_branch_combinations:
+        sorted_combinations = sorted(course_branch_combinations, key=lambda x: (x[0], x[1]))
+        for i, (course, branch) in enumerate(sorted_combinations, 1):
+            print(f"   {i:2d}. {course} → {branch}")
+    else:
+        print("   No course-branch combinations were added")
+    
+    print(f"\n" + "=" * 50)
+    print("🎉 Course and branch mapping completed!")
+
+# Usage
+csv_path = "api/registered_users_with_roles.csv"
+map_course_and_stream(csv_path)
+
+# ...existing code...
