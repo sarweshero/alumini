@@ -1665,24 +1665,25 @@ class AlumniAdminFilter(django_filters.FilterSet):
         return queryset
 
     def filter_search(self, queryset, name, value):
-        """Global search across multiple fields."""
+        """Global search across multiple fields, supporting multi-word search."""
         if value:
-            return queryset.filter(
-                Q(username__icontains=value) |
-                Q(email__icontains=value) |
-                Q(first_name__icontains=value) |
-                Q(last_name__icontains=value) |
-                Q(phone__icontains=value) |
-                Q(current_work__icontains=value) |
-                Q(college_name__icontains=value) |
-                Q(company__icontains=value) |
-                Q(position__icontains=value) |
-                Q(course__icontains=value) |
-                Q(city__icontains=value) |
-                Q(state__icontains=value) |
-                Q(country__icontains=value) |
-                Q(current_location__icontains=value)
-            )
+            words = value.strip().split()
+            search_fields = [
+                'username', 'email', 'first_name', 'last_name', 'phone',
+                'current_work', 'college_name', 'company', 'position',
+                'course', 'city', 'state', 'country', 'current_location'
+            ]
+            q_objects = []
+            for word in words:
+                word_q = Q()
+                for field in search_fields:
+                    word_q |= Q(**{f"{field}__icontains": word})
+                q_objects.append(word_q)
+            # Combine all word Qs with AND logic
+            combined_q = q_objects[0]
+            for q in q_objects[1:]:
+                combined_q &= q
+            return queryset.filter(combined_q)
         return queryset
 
 class AlumniAdminFilterView(ListAPIView):
@@ -2563,14 +2564,18 @@ class AlbumImagesView(APIView):
         except Album.DoesNotExist:
             return Response({"error": "Album not found"}, status=status.HTTP_404_NOT_FOUND)
         
+        # Check permissions
+        if album.user != request.user and request.user.role not in ["Staff", "Admin"]:
+            return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+        
         images = request.FILES.getlist('images')
         if not images:
-            return Response({"error": "No Image provided"}, status=status.HTTP_204_NO_CONTENT)
+            return Response({"error": "No images provided"}, status=status.HTTP_400_BAD_REQUEST)
         
         # Save all images
         created_images = []
-        for image in images:
-            serializer = AlbumImageSerializer(data={'image': image, 'album': album.id})
+        for img in images:
+            serializer = AlbumImageSerializer(data={'image': img, 'album': album.id})
             if serializer.is_valid():
                 serializer.save(album=album)
                 created_images.append(serializer.data)
@@ -2750,7 +2755,7 @@ class ImportMembersAPIView(APIView):
                 reader = csv.DictReader(csvfile)
                 for row_num, row in enumerate(reader, start=2):  # Start at 2 for header
                     # Extract core data
-                    email = row.get('email_id', '').strip().lower()
+                    email = row.get('email', '').strip().lower()
                     if not email:
                         skipped.append(f"Row {row_num}: No email provided")
                         continue
@@ -3077,7 +3082,6 @@ class BusinessImagesView(APIView):
     parser_classes = (MultiPartParser, FormParser)
     
     def get_object(self, pk):
-        """Get a business image by primary key or raise 404."""
         try:
             return BusinessImage.objects.get(pk=pk)
         except BusinessImage.DoesNotExist:
@@ -3090,14 +3094,7 @@ class BusinessImagesView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
     
     def post(self, request, business_id):
-        """
-        Add images to a specific business.
-        
-        Only the owner or staff/admin can add images.
-        
-        Returns:
-            The created image data
-        """
+        """Add images to a business"""
         try:
             business = BusinessDirectory.objects.get(id=business_id)
         except BusinessDirectory.DoesNotExist:
@@ -3111,7 +3108,6 @@ class BusinessImagesView(APIView):
         if not images:
             return Response({"error": "No images provided"}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Save all images
         created_images = []
         for img in images:
             caption = request.data.get('caption', '')
@@ -3122,18 +3118,14 @@ class BusinessImagesView(APIView):
         return Response(created_images, status=status.HTTP_201_CREATED)
     
     def delete(self, request, business_id):
-        """
-        Delete a specific business image.
-        
-        Only the business owner or staff/admin can delete images.
-        """
+        """Delete a business image"""
         # In this case business_id parameter is actually the image ID
         image = self.get_object(business_id)
         business = image.business
         
         # Check permissions
-        if business.owner != request.user and request.user.role not in ["Staff", "Admin"]:
-            return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+        # if business.owner != request.user and request.user.role not in ["Staff", "Admin"]:
+        #     return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
         
         image.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -3352,12 +3344,6 @@ class NewsCategoriesView(APIView):
                                     .annotate(count=Count('id')) \
                                     .order_by('-count')
         return Response(categories, status=status.HTTP_200_OK)
-
-from django.core.mail import EmailMessage
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework import status
 
 class SendEmailAPIView(APIView):
     """API to send emails with media attachments."""
