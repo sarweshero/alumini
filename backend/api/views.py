@@ -1576,6 +1576,7 @@ class AlumniAdminFilter(django_filters.FilterSet):
     company = django_filters.CharFilter(lookup_expr='icontains')
     position = django_filters.CharFilter(lookup_expr='icontains')
     course = django_filters.CharFilter(lookup_expr='icontains')
+    branch = django_filters.CharFilter(lookup_expr='icontains')
     current_location = django_filters.CharFilter(lookup_expr='icontains')
     city = django_filters.CharFilter(lookup_expr='icontains')
     state = django_filters.CharFilter(lookup_expr='icontains')
