@@ -4061,7 +4061,7 @@ def map_course_and_stream(csv_path):
     print("🎉 Course and branch mapping completed!")
 
 # Usage
-csv_path = "api/registered_users_with_roles.csv"
-map_course_and_stream(csv_path)
+# csv_path = "api/registered_users_with_roles.csv"
+# map_course_and_stream(csv_path)
 
 # ...existing code...
