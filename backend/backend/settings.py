@@ -115,9 +115,7 @@ DATABASES = {
         'NAME': 'alum',
         'USER': 'alumuser',
         'PASSWORD': 'password',
-        # 'HOST': '209.38.121.118',
-        'HOST': 'localhost',
-
+        'HOST': '209.38.121.118',
         'PORT': '5432',
     }
 }
