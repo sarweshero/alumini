@@ -200,7 +200,7 @@ EMAIL_USE_TLS = True
 EMAIL_USE_SSL = False  # Ensure SSL is disabled when using TLS
 
 # Additional settings for handling bulk emails
-EMAIL_BATCH_SIZE = 2  # Number of emails to send in a single batch
+EMAIL_BATCH_SIZE = 100  # Number of emails to send in a single batch
 
 # Celery Configuration
 CELERY_BROKER_URL = 'redis://0.0.0.0:6379/0'
