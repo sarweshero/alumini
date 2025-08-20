@@ -3391,9 +3391,12 @@ class SendEmailAPIView(APIView):
             recipients = list(User.objects.filter(is_active=True, is_superuser=False).values_list('email', flat=True))
         
         elif role:
-            # adjust filter to match your User.role field (use __iexact if needed)
+            # Only exclude @kahedu.edu.in for Alumni role
+            user_filter = User.objects.filter(role=role, is_active=True)
+            if role.lower() in ["alumni", "student"]:
+                user_filter = user_filter.exclude(email__icontains="@kahedu.edu.in")
             recipients = list(
-                User.objects.filter(role=role, is_active=True)
+                user_filter
                     .exclude(email__isnull=True)
                     .exclude(email__exact="")
                     .values_list("email", flat=True)
