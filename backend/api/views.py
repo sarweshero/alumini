@@ -33,6 +33,8 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.tokens import default_token_generator
+from django.core.validators import validate_email
+from django.core.exceptions import ValidationError
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -3120,7 +3122,7 @@ class BusinessImagesView(APIView):
         return Response(created_images, status=status.HTTP_201_CREATED)
     
     def delete(self, request, business_id):
-        """Delete a business image"""
+        """Delete an image"""
         # In this case business_id parameter is actually the image ID
         image = self.get_object(business_id)
         business = image.business
@@ -3371,11 +3373,24 @@ class SendEmailAPIView(APIView):
         send_to_all = request.data.get('send_to_all', False)
         role = request.data.get('role', None)
         recipients = request.data.get('recipients', [])
-        attachments = request.FILES.getlist('attachments')
+        # If recipients is a string, convert to list
+        if isinstance(recipients, str):
+            recipients = [recipients]
+        # Remove empty strings and validate emails
+        valid_recipients = []
+        for email in recipients:
+            email = email.strip()
+            if not email:
+                continue
+            try:
+                validate_email(email)
+                valid_recipients.append(email)
+            except ValidationError:
+                continue  # Skip invalid emails
 
-        if not subject or not body:
+        if not valid_recipients:
             return Response(
-                {"error": "Subject and body are required."},
+                {"error": "No valid recipient emails found."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -3396,7 +3411,7 @@ class SendEmailAPIView(APIView):
             email = EmailMessage(
                 subject=subject,
                 body=body,
-                to=recipients
+                to=valid_recipients
             )
 
             # Attach files if provided
@@ -4066,4 +4081,78 @@ def map_course_and_stream(csv_path):
 # csv_path = "api/registered_users_with_roles.csv"
 # map_course_and_stream(csv_path)
 
-# ...existing code...
+def update_staff_course_fields():
+    """
+    Update educational_course data for staff members in the database without modifying the CSV.
+    """
+    try:
+        # Load the CSV file
+        df = pd.read_csv('api/registered_users_with_roles.csv')
+        print(f"📊 Loaded CSV with {len(df)} rows")
+    except Exception as e:
+        print(f"❌ Error loading CSV: {e}")
+        return
+
+    # Filter rows where role is 'Staff'
+    staff_df = df[df['role'] == 'Staff']
+    print(f"🧑‍🏫 Found {len(staff_df)} staff members in CSV")
+    
+    # Counters for statistics
+    update_count = 0
+    not_found_count = 0
+    error_count = 0
+    no_course_count = 0
+    
+    # For each staff member, extract educational_course and update in database
+    for index, row in staff_df.iterrows():
+        try:
+            email = str(row.get('email', '')).strip().lower()
+            if not email or email in ["nan", "null"]:
+                print(f"⚠️ Row {index + 2}: No email provided, skipping")
+                error_count += 1
+                continue
+                
+            educational_course = row.get('educational_course', '')
+            if pd.isna(educational_course) or educational_course == '':
+                print(f"ℹ️ Row {index + 2}: No educational_course for {email}, skipping")
+                no_course_count += 1
+                continue
+                
+            # Find user in database
+            try:
+                user = User.objects.get(email=email)
+                
+                # Update the course field
+                user.course = educational_course
+                user.save(update_fields=['course'])
+                
+                print(f"🔄 [UPDATED] {email} | Course: {educational_course}")
+                update_count += 1
+                
+            except User.DoesNotExist:
+                print(f"⚠️ Row {index + 2}: User with email {email} not found in database")
+                not_found_count += 1
+                
+        except Exception as e:
+            print(f"❌ [ERROR] Row {index + 2} - {row.get('email', 'Unknown')}: {str(e)}")
+            error_count += 1
+    
+    # Final summary
+    print(f"\n📊 DATABASE UPDATE SUMMARY:")
+    print(f"🔄 Successfully updated: {update_count} users")
+    print(f"⚠️ Users not found: {not_found_count} users")
+    print(f"ℹ️ No course data: {no_course_count} users")
+    print(f"❌ Errors encountered: {error_count} users")
+    print(f"📈 Total staff records processed: {len(staff_df)}")
+    print("🎉 Staff course mapping completed!")
+    
+    return {
+        'updated': update_count,
+        'not_found': not_found_count,
+        'no_course': no_course_count,
+        'errors': error_count,
+        'total': len(staff_df)
+    }
+
+# Execute the function to update the database
+# result = update_staff_course_fields()
