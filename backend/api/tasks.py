@@ -9,6 +9,36 @@ import logging
 logger = logging.getLogger(__name__)
 User = get_user_model()
 
+# backend/api/tasks.py
+import os
+from .utils.email import send_messages_batch
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def send_email_batch_task(self, subject, body, from_email, recipients, attachments_meta=None):
+    """
+    recipients: list[str]
+    attachments_meta: list of dicts: {'path': '/tmp/..', 'name': 'file.png', 'content_type': 'image/png'}
+    The worker is responsible for deleting temp files after sending.
+    """
+    try:
+        sent = send_messages_batch(subject=subject, body=body, from_email=from_email, recipient_list=recipients, attachments_meta=attachments_meta)
+        # After success, delete any temp attachment files
+        if attachments_meta:
+            for a in attachments_meta:
+                path = a.get("path")
+                try:
+                    if path and os.path.exists(path):
+                        os.remove(path)
+                except Exception:
+                    # Log error in production
+                    pass
+        return {"sent": sent, "batch_size": len(recipients)}
+    except Exception as exc:
+        # retry on transient errors
+        raise self.retry(exc=exc)
+
+
 
 def send_birthday_notification_email(recipient_email, birthday_person_name, birthday_person_batch, days_until=0):
     """Send birthday notification email to batchmates."""

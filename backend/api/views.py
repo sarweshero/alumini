@@ -3349,76 +3349,146 @@ class NewsCategoriesView(APIView):
                                     .order_by('-count')
         return Response(categories, status=status.HTTP_200_OK)
 
+# backend/api/views.py
+import os
+import uuid
+import tempfile
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
-from django.core.mail import EmailMessage, BadHeaderError
 from django.contrib.auth import get_user_model
+from django.core.files.storage import default_storage
 
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework import status
+
+from .tasks import send_email_batch_task
 
 User = get_user_model()
 
 
+def chunk_iterable(iterable, size):
+    batch = []
+    for item in iterable:
+        batch.append(item)
+        if len(batch) >= size:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
+
+
+def save_uploaded_files_to_temp(files):
+    """
+    Save UploadedFile objects to local temp files and return metadata list:
+      [{'path': '/tmp/abc', 'name': 'file.png', 'content_type': 'image/png'}, ...]
+    IMPORTANT: the worker will be responsible for deleting these temp files after sending.
+    If you run multiple workers on different machines, use S3/shared storage instead.
+    """
+    meta = []
+    for f in files:
+        # create a unique temp filename
+        ext = os.path.splitext(f.name)[1] or ""
+        tmp_name = f"email_attach_{uuid.uuid4().hex}{ext}"
+        tmp_path = os.path.join(tempfile.gettempdir(), tmp_name)
+
+        # write file content to disk
+        with open(tmp_path, "wb") as fh:
+            for chunk in f.chunks():
+                fh.write(chunk)
+
+        meta.append({"path": tmp_path, "name": f.name, "content_type": getattr(f, "content_type", None)})
+    return meta
+
+
 class SendEmailAPIView(APIView):
-    """
-    API endpoint to send emails with optional attachments.
-    Expects multipart/form-data with fields:
-      - subject: Email subject
-      - body: Email body (plain text)
-      - recipients[]: List of recipient emails (can be multiple)
-      - send_to_all: 'true' or 'false'
-      - attachments: (optional) file(s)
-    """
+    parser_classes = [MultiPartParser, FormParser]
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        subject = request.data.get('subject', '').strip()
-        body = request.data.get('body', '').strip()
-        send_to_all = request.data.get('send_to_all', 'false').lower() == 'true'
-        recipients = request.data.getlist('recipients[]') or request.data.getlist('recipients')
-        attachments = request.FILES.getlist('attachments')
-        role = request.data.get("role", None)
+        subject = (request.data.get('subject') or "").strip()
+        body = (request.data.get('body') or "").strip()
+        send_to_all = str(request.data.get('send_to_all', 'false')).lower() == 'true'
+        role = request.data.get('role', None)
+
+        # recipients may come as recipients[] form entries
+        recipients_input = request.data.getlist('recipients[]') or request.data.getlist('recipients') or []
+
+        attachments = request.FILES.getlist('attachments') if request.FILES else []
 
         if not subject or not body:
-            return Response({"error": "Subject and body are required."}, status=400)
+            return Response({"error": "Subject and body are required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # If send_to_all, get all user emails except superusers
-        if send_to_all:
-            recipients = list(User.objects.filter(is_active=True, is_superuser=False).values_list('email', flat=True))
-        
+        # Guard: restrict send_to_all to staff/superusers to avoid accidental blasts
+        if send_to_all and not (request.user.is_staff or request.user.is_superuser):
+            return Response({"error": "Permission denied for send_to_all."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Build initial recipients source
+        if recipients_input:
+            recipients_iterable = (r for r in recipients_input)  # small list, keep as generator
+        elif send_to_all:
+            qs = User.objects.filter(is_active=True).exclude(email__isnull=True).exclude(email__exact="").values_list("email", flat=True)
+            recipients_iterable = qs.iterator(chunk_size=1000)
         elif role:
-            # Only exclude @kahedu.edu.in for Alumni role
-            user_filter = User.objects.filter(role=role, is_active=True)
-            if role.lower() in ["alumni", "student"]:
-                user_filter = user_filter.exclude(email__icontains="@kahedu.edu.in")
-            recipients = list(
-                user_filter
-                    .exclude(email__isnull=True)
-                    .exclude(email__exact="")
-                    .values_list("email", flat=True)
-            )
-        if not recipients:
-            return Response({"error": "At least one recipient is required."}, status=400)
+            qs = User.objects.filter(role=role, is_active=True).exclude(email__isnull=True).exclude(email__exact="")
+            # example: exclude internal domain for alumni
+            if role and role.lower() in ["alumni", "student"]:
+                qs = qs.exclude(email__icontains="@kahedu.edu.in")
+            recipients_iterable = qs.values_list("email", flat=True).iterator(chunk_size=1000)
+        else:
+            return Response({"error": "At least one recipient or send_to_all/role must be provided."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Compose the email
-        try:
-            email = EmailMessage(
-                subject=subject,
-                body=body,
-                from_email=settings.EMAIL_HOST_USER,
-                to=recipients,
-            )
-            # Attach files if any
-            for file in attachments:
-                email.attach(file.name, file.read(), file.content_type)
-            email.send(fail_silently=False)
-            return Response({"success": True, "message": "Email sent successfully."}, status=200)
-        except Exception as e:
-            return Response({"error": f"Failed to send email: {str(e)}"}, status=500)
+        # Validate & dedupe while streaming; collect valid emails into batches (do NOT load all into memory)
+        batch_size = getattr(settings, "EMAIL_BATCH_SIZE", 200)
+        seen = set()
+        batch = []
+        invalid = []
+        enqueued_batches = 0
+
+        # Save attachments to temp files and pass metadata to tasks (worker will delete)
+        attachments_meta = save_uploaded_files_to_temp(attachments) if attachments else []
+
+        # iterate recipients_iterable (could be generator or queryset.iterator)
+        for raw_email in recipients_iterable:
+            if not raw_email:
+                continue
+            e = raw_email.strip()
+            try:
+                validate_email(e)
+            except ValidationError:
+                invalid.append(e)
+                continue
+            key = e.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            batch.append(e)
+
+            if len(batch) >= batch_size:
+                # enqueue this batch
+                send_email_batch_task.delay(subject, body, getattr(settings, "DEFAULT_FROM_EMAIL", settings.EMAIL_HOST_USER), batch.copy(), attachments_meta)
+                enqueued_batches += 1
+                batch = []
+
+        # enqueue remaining batch
+        if batch:
+            send_email_batch_task.delay(subject, body, getattr(settings, "DEFAULT_FROM_EMAIL", settings.EMAIL_HOST_USER), batch.copy(), attachments_meta)
+            enqueued_batches += 1
+
+        # If attachments were saved to temp files, we cannot delete them here because worker may still need them;
+        # worker will delete them after sending. If you want to cleanup on failure, implement lifecycle checks.
+
+        return Response({
+            "message": "Email send enqueued",
+            "enqueued_batches": enqueued_batches,
+            "invalid_recipients_sample": invalid[:20],  # give caller a sample of invalid addresses
+            "invalid_count": len(invalid)
+        }, status=status.HTTP_202_ACCEPTED)
+
 
 
 class EmailSuggestionAPIView(APIView):
