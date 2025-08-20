@@ -3349,80 +3349,133 @@ class NewsCategoriesView(APIView):
                                     .order_by('-count')
         return Response(categories, status=status.HTTP_200_OK)
 
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
+from django.core.mail import EmailMessage, BadHeaderError
+from django.contrib.auth import get_user_model
+
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+
+User = get_user_model()
+
+
 class SendEmailAPIView(APIView):
-    """API to send emails with media attachments."""
+    """API to send emails with optional file attachments."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         """
-        Send an email to the specified recipients, all users, or users by role.
-
-        Payload:
-        - subject: Email subject
-        - body: Email body
-        - send_to_all: Boolean flag to send email to all users
-        - role: Role to filter recipients (e.g., 'Alumni', 'Staff')
-        - recipients: List of recipient email addresses (optional if send_to_all or role is provided)
-        - attachments: List of files to attach (optional)
-
-        Returns:
-            Success or error message
+        Payload (multipart/form-data if attachments present):
+          - subject (str) required
+          - body (str) required
+          - send_to_all (bool) optional
+          - role (str) optional
+          - recipients (list or comma-separated string) optional
+          - attachments (files[]) optional (key 'attachments')
         """
-        subject = request.data.get('subject')
-        body = request.data.get('body')
-        send_to_all = request.data.get('send_to_all', False)
-        role = request.data.get('role', None)
-        recipients = request.data.get('recipients', [])
-        # If recipients is a string, convert to list
-        if isinstance(recipients, str):
-            recipients = [recipients]
-        # Remove empty strings and validate emails
-        valid_recipients = []
-        for email in recipients:
-            email = email.strip()
-            if not email:
-                continue
-            try:
-                validate_email(email)
-                valid_recipients.append(email)
-            except ValidationError:
-                continue  # Skip invalid emails
+        subject = (request.data.get("subject") or "").strip()
+        body = (request.data.get("body") or "").strip()
+        send_to_all = request.data.get("send_to_all", False)
+        role = request.data.get("role", None)
+        recipients_input = request.data.get("recipients", None)
+        attachments = request.FILES.getlist("attachments") if request.FILES else []
 
-        if not valid_recipients:
-            return Response(
-                {"error": "No valid recipient emails found."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        # Basic validation
+        if not subject:
+            return Response({"error": "Missing subject."}, status=status.HTTP_400_BAD_REQUEST)
+        if not body:
+            return Response({"error": "Missing body."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Retrieve all user emails if send_to_all is True
+        # Resolve recipients from payload (string/list) first
+        recipients = []
+        if recipients_input:
+            if isinstance(recipients_input, (list, tuple)):
+                recipients = list(recipients_input)
+            elif isinstance(recipients_input, str):
+                # accept comma/newline separated string
+                recipients = [e.strip() for e in recipients_input.replace("\n", ",").split(",") if e.strip()]
+
+        # Override recipients when send_to_all or role is provided
         if send_to_all:
-            recipients = list(User.objects.values_list('email', flat=True))
+            recipients = list(
+                User.objects.filter(is_active=True)
+                    .exclude(email__isnull=True)
+                    .exclude(email__exact="")
+                    .values_list("email", flat=True)
+            )
         elif role:
-            # Filter users by role
-            recipients = list(User.objects.filter(role=role).values_list('email', flat=True))
+            # adjust filter to match your User.role field (use __iexact if needed)
+            recipients = list(
+                User.objects.filter(role=role, is_active=True)
+                    .exclude(email__isnull=True)
+                    .exclude(email__exact="")
+                    .values_list("email", flat=True)
+            )
 
         if not recipients:
+            return Response({"error": "No recipients found."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate and deduplicate emails
+        cleaned = []
+        seen = set()
+        invalid_emails = []
+        for e in recipients:
+            if not e:
+                continue
+            e = e.strip()
+            try:
+                validate_email(e)  # checks format (not existence)
+            except ValidationError:
+                invalid_emails.append(e)
+                continue
+            key = e.lower()
+            if key not in seen:
+                seen.add(key)
+                cleaned.append(e)
+
+        if not cleaned:
             return Response(
-                {"error": "No recipients found."},
+                {"error": "No valid recipient emails found.", "invalid": invalid_emails},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Compose and send email
+        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None)
         try:
-            email = EmailMessage(
+            email_msg = EmailMessage(
                 subject=subject,
                 body=body,
-                to=valid_recipients
+                from_email=from_email,
+                to=cleaned,
+                reply_to=[request.user.email] if getattr(request.user, "email", None) else None,
             )
 
-            # Attach files if provided
-            for attachment in attachments:
-                email.attach(attachment.name, attachment.read(), attachment.content_type)
+            # Attach uploaded files (use (name, content, mimetype) triples)
+            for f in attachments:
+                try:
+                    content = f.read()
+                    email_msg.attach(f.name, content, getattr(f, "content_type", None))
+                finally:
+                    # close uploaded file if possible (f is an UploadedFile)
+                    try:
+                        f.close()
+                    except Exception:
+                        pass
 
-            email.send()
-            return Response({"message": "Email sent successfully."}, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+            email_msg.send(fail_silently=False)
+        except BadHeaderError:
+            return Response({"error": "Invalid header found."}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            # In production, log exc instead of returning raw text
+            return Response({"error": "Failed to send email", "details": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({"message": "Email sent successfully.", "invalid": invalid_emails}, status=status.HTTP_200_OK)
+
+
 class EmailSuggestionAPIView(APIView):
     """API to provide email suggestions while typing."""
     permission_classes = [IsAuthenticated]
