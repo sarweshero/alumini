@@ -3466,7 +3466,7 @@ class SendEmailAPIView(APIView):
                     except Exception:
                         pass
 
-            email_msg.send(fail_silently=False, timeout=15)
+            email_msg.send(fail_silently=False)
         except BadHeaderError:
             return Response({"error": "Invalid header found."}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as exc:
