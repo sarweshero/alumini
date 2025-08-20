@@ -756,6 +756,21 @@ class StaffLoginView(APIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+class UsernameAvailabilityView(APIView):
+    """
+    API endpoint to check if a username is available.
+    GET parameter: ?username=desired_username
+    Returns: {"available": true/false}
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        username = request.query_params.get("username", "").strip()
+        if not username:
+            return Response({"error": "Username is required."}, status=status.HTTP_400_BAD_REQUEST)
+        exists = User.objects.filter(username__iexact=username).exists()
+        return Response({"available": not exists}, status=status.HTTP_200_OK)
+    
 
 class UserLoginView(APIView):
     """View for regular user authentication."""

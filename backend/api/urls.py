@@ -45,6 +45,8 @@ urlpatterns = [
     path('businesses/<int:business_id>/images/', BusinessImagesView.as_view(), name='business-images'),
     path('businesses/categories/', BusinessCategoriesView.as_view(), name='business-categories'),
     path('businesses/search/', BusinessSearchView.as_view(), name='business-search'),
+    path('check-username/', UsernameAvailabilityView.as_view(), name='check-username'),
+
     # Add these lines to the urlpatterns list:
     path('news/', NewsRoomListCreateView.as_view(), name='news-list-create'),
     path('news/<int:pk>/', NewsRoomDetailView.as_view(), name='news-detail'),
