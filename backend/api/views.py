@@ -3449,7 +3449,7 @@ class SendEmailAPIView(APIView):
             email_msg = EmailMessage(
                 subject=subject,
                 body=body,
-                from_email=from_email,
+                # from_email=from_email,
                 to=cleaned,
                 reply_to=[request.user.email] if getattr(request.user, "email", None) else None,
             )
