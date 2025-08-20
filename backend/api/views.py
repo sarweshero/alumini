@@ -3381,6 +3381,7 @@ class SendEmailAPIView(APIView):
         send_to_all = request.data.get('send_to_all', 'false').lower() == 'true'
         recipients = request.data.getlist('recipients[]') or request.data.getlist('recipients')
         attachments = request.FILES.getlist('attachments')
+        role = request.data.get("role", None)
 
         if not subject or not body:
             return Response({"error": "Subject and body are required."}, status=400)
@@ -3388,7 +3389,15 @@ class SendEmailAPIView(APIView):
         # If send_to_all, get all user emails except superusers
         if send_to_all:
             recipients = list(User.objects.filter(is_active=True, is_superuser=False).values_list('email', flat=True))
-
+        
+        elif role:
+            # adjust filter to match your User.role field (use __iexact if needed)
+            recipients = list(
+                User.objects.filter(role=role, is_active=True)
+                    .exclude(email__isnull=True)
+                    .exclude(email__exact="")
+                    .values_list("email", flat=True)
+            )
         if not recipients:
             return Response({"error": "At least one recipient is required."}, status=400)
 
