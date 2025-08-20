@@ -3364,116 +3364,49 @@ User = get_user_model()
 
 
 class SendEmailAPIView(APIView):
-    """API to send emails with optional file attachments."""
+    """
+    API endpoint to send emails with optional attachments.
+    Expects multipart/form-data with fields:
+      - subject: Email subject
+      - body: Email body (plain text)
+      - recipients[]: List of recipient emails (can be multiple)
+      - send_to_all: 'true' or 'false'
+      - attachments: (optional) file(s)
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        """
-        Payload (multipart/form-data if attachments present):
-          - subject (str) required
-          - body (str) required
-          - send_to_all (bool) optional
-          - role (str) optional
-          - recipients (list or comma-separated string) optional
-          - attachments (files[]) optional (key 'attachments')
-        """
-        subject = (request.data.get("subject") or "").strip()
-        body = (request.data.get("body") or "").strip()
-        send_to_all = request.data.get("send_to_all", False)
-        role = request.data.get("role", None)
-        recipients_input = request.data.get("recipients", None)
-        attachments = request.FILES.getlist("attachments") if request.FILES else []
+        subject = request.data.get('subject', '').strip()
+        body = request.data.get('body', '').strip()
+        send_to_all = request.data.get('send_to_all', 'false').lower() == 'true'
+        recipients = request.data.getlist('recipients[]') or request.data.getlist('recipients')
+        attachments = request.FILES.getlist('attachments')
 
-        # Basic validation
-        if not subject:
-            return Response({"error": "Missing subject."}, status=status.HTTP_400_BAD_REQUEST)
-        if not body:
-            return Response({"error": "Missing body."}, status=status.HTTP_400_BAD_REQUEST)
+        if not subject or not body:
+            return Response({"error": "Subject and body are required."}, status=400)
 
-        # Resolve recipients from payload (string/list) first
-        recipients = []
-        if recipients_input:
-            if isinstance(recipients_input, (list, tuple)):
-                recipients = list(recipients_input)
-            elif isinstance(recipients_input, str):
-                # accept comma/newline separated string
-                recipients = [e.strip() for e in recipients_input.replace("\n", ",").split(",") if e.strip()]
-
-        # Override recipients when send_to_all or role is provided
+        # If send_to_all, get all user emails except superusers
         if send_to_all:
-            recipients = list(
-                User.objects.filter(is_active=True)
-                    .exclude(email__isnull=True)
-                    .exclude(email__exact="")
-                    .values_list("email", flat=True)
-            )
-        elif role:
-            # adjust filter to match your User.role field (use __iexact if needed)
-            recipients = list(
-                User.objects.filter(role=role, is_active=True)
-                    .exclude(email__isnull=True)
-                    .exclude(email__exact="")
-                    .values_list("email", flat=True)
-            )
+            recipients = list(User.objects.filter(is_active=True, is_superuser=False).values_list('email', flat=True))
 
         if not recipients:
-            return Response({"error": "No recipients found."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "At least one recipient is required."}, status=400)
 
-        # Validate and deduplicate emails
-        cleaned = []
-        seen = set()
-        invalid_emails = []
-        for e in recipients:
-            if not e:
-                continue
-            e = e.strip()
-            try:
-                validate_email(e)  # checks format (not existence)
-            except ValidationError:
-                invalid_emails.append(e)
-                continue
-            key = e.lower()
-            if key not in seen:
-                seen.add(key)
-                cleaned.append(e)
-
-        if not cleaned:
-            return Response(
-                {"error": "No valid recipient emails found.", "invalid": invalid_emails},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Compose and send email
-        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None)
+        # Compose the email
         try:
-            email_msg = EmailMessage(
+            email = EmailMessage(
                 subject=subject,
                 body=body,
-                # from_email=from_email,
-                to=cleaned,
-                reply_to=[request.user.email] if getattr(request.user, "email", None) else None,
+                from_email=settings.EMAIL_HOST_USER,
+                to=recipients,
             )
-
-            # Attach uploaded files (use (name, content, mimetype) triples)
-            for f in attachments:
-                try:
-                    content = f.read()
-                    email_msg.attach(f.name, content, getattr(f, "content_type", None))
-                finally:
-                    # close uploaded file if possible (f is an UploadedFile)
-                    try:
-                        f.close()
-                    except Exception:
-                        pass
-
-            email_msg.send(fail_silently=False)
-        except BadHeaderError:
-            return Response({"error": "Invalid header found."}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as exc:
-            # In production, log exc instead of returning raw text
-            return Response({"error": "Failed to send email", "details": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        return Response({"message": "Email sent successfully.", "invalid": invalid_emails}, status=status.HTTP_200_OK)
+            # Attach files if any
+            for file in attachments:
+                email.attach(file.name, file.read(), file.content_type)
+            email.send(fail_silently=False)
+            return Response({"success": True, "message": "Email sent successfully."}, status=200)
+        except Exception as e:
+            return Response({"error": f"Failed to send email: {str(e)}"}, status=500)
 
 
 class EmailSuggestionAPIView(APIView):
